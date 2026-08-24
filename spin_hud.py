@@ -551,6 +551,19 @@ def _load_index_html() -> str:
 
 
 # Embedded HTML/CSS/JS Studio Web App (Fallback)
+def _load_index_html() -> str:
+    """Load UI template from web/index.html next to script if present, else fallback to embedded."""
+    candidate = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "index.html")
+    if os.path.exists(candidate):
+        try:
+            with open(candidate, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception:
+            pass
+    return INDEX_HTML
+
+
+# Embedded HTML/CSS/JS Studio Web App (Fallback)
 INDEX_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -861,19 +874,31 @@ INDEX_HTML = r"""<!DOCTYPE html>
     .layout-left .telemetry-dock {
       position: absolute;
       left: 32px;
-      top: 180px;
-      bottom: 24px;
+      top: 172px;
+      bottom: 16px;
       width: 380px;
       max-width: 380px;
       margin: 0;
       flex-direction: column;
       justify-content: flex-start;
-      gap: 10px;
+      gap: 8px;
       z-index: 40;
       overflow-y: auto;
-      scrollbar-width: none;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0, 229, 255, 0.4) rgba(255, 255, 255, 0.05);
     }
-    .layout-left .telemetry-dock::-webkit-scrollbar { display: none; }
+    .layout-left .telemetry-dock::-webkit-scrollbar {
+      width: 5px;
+      display: block;
+    }
+    .layout-left .telemetry-dock::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+    }
+    .layout-left .telemetry-dock::-webkit-scrollbar-thumb {
+      background: rgba(0, 229, 255, 0.4);
+      border-radius: 3px;
+    }
     .layout-left #interval-cue-bar {
       top: 80px;
       left: 32px;
@@ -886,19 +911,31 @@ INDEX_HTML = r"""<!DOCTYPE html>
     .layout-right .telemetry-dock {
       position: absolute;
       right: 32px;
-      top: 160px;
-      bottom: 24px;
+      top: 154px;
+      bottom: 16px;
       width: 380px;
       max-width: 380px;
       margin: 0;
       flex-direction: column;
       justify-content: flex-start;
-      gap: 10px;
+      gap: 8px;
       z-index: 40;
       overflow-y: auto;
-      scrollbar-width: none;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0, 229, 255, 0.4) rgba(255, 255, 255, 0.05);
     }
-    .layout-right .telemetry-dock::-webkit-scrollbar { display: none; }
+    .layout-right .telemetry-dock::-webkit-scrollbar {
+      width: 5px;
+      display: block;
+    }
+    .layout-right .telemetry-dock::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+    }
+    .layout-right .telemetry-dock::-webkit-scrollbar-thumb {
+      background: rgba(0, 229, 255, 0.4);
+      border-radius: 3px;
+    }
     .layout-right .yt-container {
       top: 80px;
       right: 32px;
@@ -910,34 +947,96 @@ INDEX_HTML = r"""<!DOCTYPE html>
     .layout-left .telemetry-card,
     .layout-right .telemetry-card {
       flex: 0 0 auto;
-      padding: 14px 18px;
-      border-radius: 18px;
-      min-height: 118px;
-      gap: 4px;
+      padding: 10px 16px;
+      border-radius: 16px;
+      min-height: 96px;
+      gap: 2px;
     }
 
     .layout-left .card-value,
     .layout-right .card-value {
-      font-size: 44px;
+      font-size: 38px;
       line-height: 1;
       font-weight: 800;
     }
 
     .layout-left .card-main,
     .layout-right .card-main {
-      margin: 4px 0;
+      margin: 2px 0;
       gap: 8px;
     }
 
     .layout-left .card-unit,
     .layout-right .card-unit {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 700;
     }
 
     .layout-left .card-footer,
     .layout-right .card-footer {
-      font-size: 12px;
+      font-size: 11.5px;
+    }
+
+    @media (max-height: 900px) {
+      .layout-left .telemetry-dock {
+        top: 168px;
+        bottom: 10px;
+        gap: 6px;
+      }
+      .layout-right .telemetry-dock {
+        top: 150px;
+        bottom: 10px;
+        gap: 6px;
+      }
+      .layout-left .telemetry-card,
+      .layout-right .telemetry-card {
+        padding: 7px 14px;
+        min-height: 82px;
+        border-radius: 14px;
+      }
+      .layout-left .card-value,
+      .layout-right .card-value {
+        font-size: 32px;
+      }
+      .layout-left .card-main,
+      .layout-right .card-main {
+        margin: 1px 0;
+        gap: 6px;
+      }
+      .layout-left .card-unit,
+      .layout-right .card-unit {
+        font-size: 12px;
+      }
+      .layout-left .card-footer,
+      .layout-right .card-footer {
+        font-size: 11px;
+      }
+    }
+
+    @media (max-height: 750px) {
+      .layout-left .telemetry-dock {
+        top: 154px;
+        bottom: 6px;
+        gap: 4px;
+      }
+      .layout-right .telemetry-dock {
+        top: 142px;
+        bottom: 6px;
+        gap: 4px;
+      }
+      .layout-left .telemetry-card,
+      .layout-right .telemetry-card {
+        padding: 5px 12px;
+        min-height: 70px;
+        border-radius: 12px;
+      }
+      .layout-left .card-value,
+      .layout-right .card-value {
+        font-size: 26px;
+      }
+      .card-label {
+        font-size: 11px;
+      }
     }
 
     .card-label {
@@ -1776,7 +1875,19 @@ INDEX_HTML = r"""<!DOCTYPE html>
         ]
       }
     };
-    let currentProgram = "open";
+    let currentProgram = localStorage.getItem('spin_hud_program') || 'open';
+
+    function setProgram(prog) {
+      currentProgram = prog || 'open';
+      try { localStorage.setItem('spin_hud_program', currentProgram); } catch (e) {}
+      const quickSelect = document.getElementById('quick-select-program');
+      if (quickSelect) quickSelect.value = currentProgram;
+      const modalSelect = document.getElementById('select-program');
+      if (modalSelect) modalSelect.value = currentProgram;
+      const elapsed = latestSnapshot ? (latestSnapshot.elapsed_sec || 0) : 0;
+      const cad = latestSnapshot ? latestSnapshot.cadence : null;
+      updateIntervalEngine(elapsed, cad);
+    }
 
     function onYouTubeIframeAPIReady() {
       player = new YT.Player('player', {
@@ -2262,12 +2373,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
     // Quick Workout Program Selector
     document.getElementById('quick-select-program').onchange = (e) => {
-      currentProgram = e.target.value;
-      const modalSelect = document.getElementById('select-program');
-      if (modalSelect) modalSelect.value = currentProgram;
-      const elapsed = latestSnapshot ? (latestSnapshot.elapsed_sec || 0) : 0;
-      const cad = latestSnapshot ? latestSnapshot.cadence : null;
-      updateIntervalEngine(elapsed, cad);
+      setProgram(e.target.value);
     };
 
     // Settings Modal
@@ -2284,12 +2390,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
       const wheel = parseFloat(document.getElementById('input-wheel').value);
       const maxhr = parseInt(document.getElementById('input-maxhr').value);
       const weight = parseFloat(document.getElementById('input-weight').value);
-      currentProgram = document.getElementById('select-program').value;
-      const quickSelect = document.getElementById('quick-select-program');
-      if (quickSelect) quickSelect.value = currentProgram;
-      const elapsed = latestSnapshot ? (latestSnapshot.elapsed_sec || 0) : 0;
-      const cad = latestSnapshot ? latestSnapshot.cadence : null;
-      updateIntervalEngine(elapsed, cad);
+      setProgram(document.getElementById('select-program').value);
       
       fetch('/api/settings', {
         method: 'POST',
@@ -2325,11 +2426,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
     setInterval(updateClock, 1000);
 
     setLayout(currentLayout);
+    setProgram(currentProgram);
     initTelemetry();
   </script>
 </body>
 </html>"""
-
 
 
 YOUTUBE_TITLE_CACHE: dict[str, str] = {}
