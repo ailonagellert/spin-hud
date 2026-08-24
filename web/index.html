@@ -1068,13 +1068,22 @@
       setTimeout(renderPlaylist, 1000);
     }
 
+    function setWorkoutRunning(shouldRun) {
+      if (!latestSnapshot) return;
+      if (latestSnapshot.is_running !== shouldRun) {
+        fetch('/api/workout/toggle', { method: 'POST' });
+      }
+    }
+
     function onPlayerStateChange(event) {
       updateVideoTitle();
       const playBtn = document.getElementById('btn-play');
       if (event.data === YT.PlayerState.PLAYING) {
         playBtn.textContent = '⏸';
-      } else {
+        setWorkoutRunning(true);
+      } else if (event.data === YT.PlayerState.PAUSED) {
         playBtn.textContent = '▶';
+        setWorkoutRunning(false);
       }
       renderPlaylist();
     }
@@ -1442,7 +1451,14 @@
     };
 
     document.getElementById('btn-timer-toggle').onclick = () => {
-      fetch('/api/workout/toggle', { method: 'POST' });
+      fetch('/api/workout/toggle', { method: 'POST' }).then(() => {
+        if (!player || !latestSnapshot) return;
+        if (latestSnapshot.is_running) {
+          if (player.pauseVideo) player.pauseVideo();
+        } else {
+          if (player.playVideo) player.playVideo();
+        }
+      });
     };
 
     document.getElementById('btn-reset-timer').onclick = () => {
