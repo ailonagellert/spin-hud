@@ -564,8 +564,8 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
-      min-width: 320px;
-      max-width: 440px;
+      min-width: 350px;
+      max-width: 480px;
       box-shadow: 0 12px 40px rgba(0,0,0,0.5);
       z-index: 50;
       transition: all 0.3s ease;
@@ -577,6 +577,50 @@
       align-items: center;
       font-size: 13px;
       font-weight: 800;
+      gap: 10px;
+    }
+
+    .program-select-dropdown {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid var(--glass-border);
+      color: var(--accent-cyan);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 4px 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.2s;
+      min-height: 28px;
+    }
+
+    .program-select-dropdown:hover {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: var(--accent-cyan);
+    }
+
+    .program-select-dropdown:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+    }
+
+    .program-select-dropdown option {
+      background: #0f172a;
+      color: #fff;
+      font-weight: 700;
+      padding: 6px;
+    }
+
+    .cue-interval-badge {
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--glass-border);
+      padding: 2px 8px;
+      border-radius: 6px;
+      white-space: nowrap;
     }
 
     .interval-target-pill {
@@ -762,7 +806,15 @@
     <!-- Interval Workout Cue Bar -->
     <div id="interval-cue-bar" class="interval-cue-bar interactive">
       <div class="interval-cue-header">
-        <span id="cue-title" style="color:var(--accent-cyan); font-weight:800;">Open Ride</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <select id="quick-select-program" class="program-select-dropdown" title="Select Workout Interval Program">
+            <option value="open">🚴 Open Spin</option>
+            <option value="hiit20">⚡ 20m HIIT</option>
+            <option value="climb30">⛰️ 30m Climbs</option>
+            <option value="tabata">🔥 15m Tabata</option>
+          </select>
+          <span id="cue-title" class="cue-interval-badge">Free Ride</span>
+        </div>
         <span id="cue-target" class="interval-target-pill">Target: Free Spin</span>
       </div>
       <div class="interval-progress-bg">
@@ -1166,7 +1218,7 @@
 
       const prog = WORKOUT_PROGRAMS[currentProgram] || WORKOUT_PROGRAMS.open;
       if (!prog || !prog.intervals || prog.intervals.length === 0) {
-        cueTitle.textContent = "Open Ride";
+        cueTitle.textContent = "Free Ride";
         cueTitle.style.color = "var(--accent-cyan)";
         cueTarget.textContent = "Target: Free Spin";
         cueTarget.style.borderColor = "var(--glass-border)";
@@ -1472,9 +1524,23 @@
       document.getElementById('label-speed-unit').textContent = unit;
     };
 
+    // Quick Workout Program Selector
+    document.getElementById('quick-select-program').onchange = (e) => {
+      currentProgram = e.target.value;
+      const modalSelect = document.getElementById('select-program');
+      if (modalSelect) modalSelect.value = currentProgram;
+      const elapsed = latestSnapshot ? (latestSnapshot.elapsed_sec || 0) : 0;
+      const cad = latestSnapshot ? latestSnapshot.cadence : null;
+      updateIntervalEngine(elapsed, cad);
+    };
+
     // Settings Modal
     const modal = document.getElementById('settings-modal');
-    document.getElementById('btn-settings').onclick = () => modal.classList.add('open');
+    document.getElementById('btn-settings').onclick = () => {
+      const modalSelect = document.getElementById('select-program');
+      if (modalSelect) modalSelect.value = currentProgram;
+      modal.classList.add('open');
+    };
     document.getElementById('btn-close-modal').onclick = () => modal.classList.remove('open');
     
     document.getElementById('btn-save-settings').onclick = () => {
@@ -1483,6 +1549,11 @@
       const maxhr = parseInt(document.getElementById('input-maxhr').value);
       const weight = parseFloat(document.getElementById('input-weight').value);
       currentProgram = document.getElementById('select-program').value;
+      const quickSelect = document.getElementById('quick-select-program');
+      if (quickSelect) quickSelect.value = currentProgram;
+      const elapsed = latestSnapshot ? (latestSnapshot.elapsed_sec || 0) : 0;
+      const cad = latestSnapshot ? latestSnapshot.cadence : null;
+      updateIntervalEngine(elapsed, cad);
       
       fetch('/api/settings', {
         method: 'POST',
