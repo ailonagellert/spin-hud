@@ -1,34 +1,41 @@
 #!/usr/bin/env python3
-"""Always-on-top spin HUD: Garmin 965 HR + Magene S3+ cadence over BLE.
+"""Peloton-Style Spin Studio: Garmin 965 HR + Magene S3+ Cadence & Speed + YouTube Playlist HUD.
 
-On the laptop (not this Hermes box):
-  python -m pip install bleak
-  python spin_hud.py --scan          # see what's advertising
-  python spin_hud.py                 # HUD
-  python spin_hud.py --self-check    # parser tests, no radio
-
-Watch: start Indoor Bike with Broadcast Heart Rate, or Virtual Run.
-Magene: crank mount, red flash = cadence. Pair the 965 over ANT+ so
-BLE stays free for this laptop. Spin the crank — it sleeps after 1 min.
-Do not pair either device in Windows/macOS Bluetooth settings.
+Usage:
+  python spin_hud.py                  # Launches Web Spin Studio on http://localhost:8080
+  python spin_hud.py --demo           # Launches with simulated telemetry for preview
+  python spin_hud.py --scan           # Scans for nearby BLE sensors
+  python spin_hud.py --self-check     # Runs parser & engine validation
+  python spin_hud.py --gui            # Fallback to classic Tkinter overlay
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import json
+import math
+import os
 import struct
 import sys
 import threading
 import time
+import webbrowser
+from typing import Any
 
-HR_UUID = "00002a37-0000-1000-8000-00805f9b34fb"
-CSC_UUID = "00002a5b-0000-1000-8000-00805f9b34fb"
+# Standard BLE GATT UUIDs
 HR_SVC = "0000180d-0000-1000-8000-00805f9b34fb"
+HR_UUID = "00002a37-0000-1000-8000-00805f9b34fb"
 CSC_SVC = "00001816-0000-1000-8000-00805f9b34fb"
+CSC_UUID = "00002a5b-0000-1000-8000-00805f9b34fb"
+
+DEFAULT_PLAYLIST_ID = "PLBE6A702D02AB879D"
+DEFAULT_WHEEL_CIRC_M = 1.4363  # 18" flywheel circumference (pi * 18" = 1436 mm)
+DEFAULT_MAX_HR = 190
 
 
 def parse_hr(data: bytes) -> int | None:
+    """Parse BLE Heart Rate Measurement (0x2A37)."""
     if not data:
         return None
     flags = data[0]
@@ -42,7 +49,7 @@ def parse_hr(data: bytes) -> int | None:
 
 
 def parse_csc(data: bytes, prev: tuple[int, int] | None) -> tuple[float | None, tuple[int, int] | None, str]:
-    """Return (rpm or None, new prev, mode). mode is crank|wheel|empty."""
+    """Legacy parser for crank mode / test compatibility."""
     if not data:
         return None, prev, "empty"
     flags = data[0]
@@ -50,7 +57,7 @@ def parse_csc(data: bytes, prev: tuple[int, int] | None) -> tuple[float | None, 
     if flags & 0x01:
         if len(data) < off + 6:
             return None, prev, "wheel"
-        off += 6  # skip wheel revs + event time
+        off += 6
     if not (flags & 0x02):
         return None, prev, "wheel" if flags & 0x01 else "empty"
     if len(data) < off + 4:
@@ -67,188 +74,2057 @@ def parse_csc(data: bytes, prev: tuple[int, int] | None) -> tuple[float | None, 
     return rpm, now, "crank"
 
 
+def parse_csc_crank(data: bytes, prev: tuple[int, int] | None) -> tuple[float | None, tuple[int, int] | None]:
+    """Parse crank cadence (RPM) from CSC measurement (0x2A5B)."""
+    if not data:
+        return None, prev
+    flags = data[0]
+    off = 1
+    if flags & 0x01:
+        off += 6  # skip wheel data
+    if not (flags & 0x02) or len(data) < off + 4:
+        return None, prev
+    revs, ev = struct.unpack_from("<HH", data, off)
+    now = (revs, ev)
+    if prev is None:
+        return None, now
+    d_revs = (revs - prev[0]) & 0xFFFF
+    d_ticks = (ev - prev[1]) & 0xFFFF
+    if d_ticks == 0:
+        return None, now
+    if d_revs > 25:  # Counter reset / discontinuity
+        return 0.0, now
+    rpm = d_revs * 1024 * 60 / d_ticks
+    if rpm > 250.0:  # Plausibility clamp
+        return 0.0, now
+    return rpm, now
+
+
+def parse_csc_wheel(
+    data: bytes,
+    prev: tuple[int, int] | None,  # (prev_revs, prev_ev)
+    wheel_circ_m: float = DEFAULT_WHEEL_CIRC_M,
+) -> tuple[float | None, float, tuple[int, int] | None]:
+    """Parse wheel speed (mph) and delta distance (miles) from CSC measurement (0x2A5B).
+
+    Returns (speed_mph, delta_miles, new_prev).
+    """
+    if not data:
+        return None, 0.0, prev
+    flags = data[0]
+    if not (flags & 0x01) or len(data) < 7:
+        return None, 0.0, prev
+    revs, ev = struct.unpack_from("<IH", data, 1)
+    now = (revs, ev)
+    if prev is None:
+        return 0.0, 0.0, now
+    prev_revs, prev_ev = prev
+    d_revs = (revs - prev_revs) & 0xFFFFFFFF
+    d_ticks = (ev - prev_ev) & 0xFFFF
+
+    # Discontinuity / counter reboot / unrealistic jump check (e.g. > 100 revs in 1 event)
+    if d_revs > 100 or d_ticks == 0:
+        return 0.0, 0.0, now
+
+    delta_m = d_revs * wheel_circ_m
+    delta_miles = delta_m / 1609.344
+
+    if d_revs == 0:
+        return 0.0, 0.0, now
+
+    speed_mps = (d_revs * wheel_circ_m * 1024.0) / d_ticks
+    speed_mph = speed_mps * 2.236936
+
+    # Unrealistic speed check (> 120 mph is a corrupted packet/reboot)
+    if speed_mph > 120.0:
+        return 0.0, 0.0, now
+
+    return speed_mph, delta_miles, now
+
+
+def calculate_hr_zone(bpm: int | None, max_hr: int = DEFAULT_MAX_HR) -> dict[str, Any]:
+    """Calculate HR Zone metrics (Zone 1 to 5)."""
+    if bpm is None or bpm <= 0:
+        return {"zone": 0, "name": "Resting", "pct": 0, "color": "#64748b"}
+    safe_max_hr = max_hr if max_hr > 0 else DEFAULT_MAX_HR
+    pct = int(round((bpm / safe_max_hr) * 100))
+    if pct < 60:
+        return {"zone": 1, "name": "Warm Up", "pct": pct, "color": "#38bdf8"}  # Sky Blue
+    elif pct < 70:
+        return {"zone": 2, "name": "Fat Burn", "pct": pct, "color": "#22c55e"}  # Green
+    elif pct < 80:
+        return {"zone": 3, "name": "Aerobic", "pct": pct, "color": "#eab308"}  # Yellow
+    elif pct < 90:
+        return {"zone": 4, "name": "Anaerobic", "pct": pct, "color": "#f97316"}  # Orange
+    else:
+        return {"zone": 5, "name": "Max Peak", "pct": pct, "color": "#ef4444"}  # Red
+
+
+CACHE_FILE = os.path.expanduser("~/.spin_hud_devices.json")
+
+
+def load_device_cache() -> dict[str, str]:
+    """Load cached Bluetooth sensor MAC addresses."""
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def save_device_cache(cache: dict[str, str]) -> None:
+    """Save Bluetooth sensor MAC addresses for fast startup connection."""
+    try:
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, indent=2)
+    except Exception:
+        pass
+
+
+class WorkoutState:
+    """Thread-safe telemetry state container with session statistics."""
+
+    def __init__(self, playlist_id: str = DEFAULT_PLAYLIST_ID, wheel_circ_m: float = DEFAULT_WHEEL_CIRC_M, max_hr: int = DEFAULT_MAX_HR):
+        self.lock = threading.Lock()
+        self.playlist_id = playlist_id
+        self.wheel_circ_m = wheel_circ_m if (wheel_circ_m and math.isfinite(wheel_circ_m) and wheel_circ_m > 0) else DEFAULT_WHEEL_CIRC_M
+        self.max_hr = max_hr if (max_hr and max_hr > 0) else DEFAULT_MAX_HR
+
+        # Instantaneous live metrics
+        self.hr: int | None = None
+        self.cadence: float | None = None
+        self.speed_mph: float | None = None
+        self.distance_miles: float = 0.0
+
+        # Session aggregations & maximums
+        self.hr_sum: int = 0
+        self.hr_count: int = 0
+        self.max_hr_val: int = 0
+
+        self.cad_sum: float = 0.0
+        self.cad_count: int = 0
+        self.max_cadence: float = 0.0
+
+        self.spd_sum: float = 0.0
+        self.spd_count: int = 0
+        self.max_speed_mph: float = 0.0
+
+        self.calories: float = 0.0
+        self.last_cal_time: float = time.monotonic()
+
+        self.started_at = time.monotonic()
+        self.is_running = True
+        self.paused_duration = 0.0
+        self.last_pause_time = 0.0
+
+        self.sensors = {
+            "hr": {"connected": False, "name": "Searching…"},
+            "cadence": {"connected": False, "name": "Searching…"},
+            "speed": {"connected": False, "name": "Searching…"},
+        }
+        self.status = "Initializing sensors…"
+
+    def reset_workout(self) -> None:
+        with self.lock:
+            now = time.monotonic()
+            self.started_at = now
+            self.distance_miles = 0.0
+            self.paused_duration = 0.0
+            self.last_pause_time = 0.0
+            self.is_running = True
+
+            self.hr_sum = 0
+            self.hr_count = 0
+            self.max_hr_val = 0
+
+            self.cad_sum = 0.0
+            self.cad_count = 0
+            self.max_cadence = 0.0
+
+            self.spd_sum = 0.0
+            self.spd_count = 0
+            self.max_speed_mph = 0.0
+
+            self.calories = 0.0
+            self.last_cal_time = now
+
+    def toggle_workout_timer(self) -> bool:
+        with self.lock:
+            now = time.monotonic()
+            if self.is_running:
+                self.is_running = False
+                self.last_pause_time = now
+            else:
+                self.is_running = True
+                if self.last_pause_time > 0:
+                    self.paused_duration += (now - self.last_pause_time)
+                self.last_cal_time = now
+            return self.is_running
+
+    def set_sensor(self, kind: str, connected: bool, name: str) -> None:
+        with self.lock:
+            self.sensors[kind] = {"connected": connected, "name": name}
+
+    def add_distance_delta(self, delta_miles: float) -> None:
+        """Accumulate distance delta strictly when the session is actively running."""
+        with self.lock:
+            if self.is_running and delta_miles > 0:
+                self.distance_miles += delta_miles
+
+    def update_telemetry(self, **kwargs) -> None:
+        """Update telemetry fields and accumulate statistics only for updated fields."""
+        with self.lock:
+            now = time.monotonic()
+
+            # Heart Rate update
+            if "hr" in kwargs:
+                new_hr = kwargs["hr"]
+                self.hr = new_hr
+                if self.is_running and new_hr is not None and new_hr > 0:
+                    self.hr_sum += new_hr
+                    self.hr_count += 1
+                    if new_hr > self.max_hr_val:
+                        self.max_hr_val = new_hr
+
+                    dt = now - self.last_cal_time
+                    if 0 < dt < 10.0:  # Valid sampling interval
+                        if new_hr > 75:
+                            self.calories += (new_hr - 55) * 0.0022 * dt
+                    self.last_cal_time = now
+
+            # Cadence update
+            if "cadence" in kwargs:
+                new_cad = kwargs["cadence"]
+                self.cadence = new_cad
+                if self.is_running and new_cad is not None and new_cad > 0:
+                    self.cad_sum += new_cad
+                    self.cad_count += 1
+                    if new_cad > self.max_cadence:
+                        self.max_cadence = new_cad
+
+            # Speed update
+            if "speed_mph" in kwargs:
+                new_spd = kwargs["speed_mph"]
+                self.speed_mph = new_spd
+                if self.is_running and new_spd is not None and new_spd > 0:
+                    self.spd_sum += new_spd
+                    self.spd_count += 1
+                    if new_spd > self.max_speed_mph:
+                        self.max_speed_mph = new_spd
+
+            # Distance override (if specified directly)
+            if "distance_miles" in kwargs:
+                if self.is_running:
+                    self.distance_miles = kwargs["distance_miles"]
+
+            # Other attributes (status, playlist_id, etc.)
+            for k in ("status", "playlist_id"):
+                if k in kwargs:
+                    setattr(self, k, kwargs[k])
+
+    def get_snapshot(self) -> dict[str, Any]:
+        with self.lock:
+            now = time.monotonic()
+            if self.is_running:
+                elapsed = int(now - self.started_at - self.paused_duration)
+            else:
+                elapsed = int(self.last_pause_time - self.started_at - self.paused_duration)
+            elapsed = max(0, elapsed)
+
+            zone_info = calculate_hr_zone(self.hr, self.max_hr)
+
+            speed_val = self.speed_mph
+            speed_kmh = (speed_val * 1.60934) if speed_val is not None else None
+            dist_km = self.distance_miles * 1.60934
+
+            avg_hr = int(round(self.hr_sum / self.hr_count)) if self.hr_count > 0 else None
+            avg_cad = int(round(self.cad_sum / self.cad_count)) if self.cad_count > 0 else None
+            avg_spd_mph = round(self.spd_sum / self.spd_count, 1) if self.spd_count > 0 else None
+            avg_spd_kmh = round(avg_spd_mph * 1.60934, 1) if avg_spd_mph is not None else None
+            max_spd_kmh = round(self.max_speed_mph * 1.60934, 1) if self.max_speed_mph > 0 else None
+
+            return {
+                "hr": self.hr,
+                "avg_hr": avg_hr,
+                "max_hr": self.max_hr_val if self.max_hr_val > 0 else None,
+                "hr_zone": zone_info["zone"],
+                "hr_zone_name": zone_info["name"],
+                "hr_zone_pct": zone_info["pct"],
+                "hr_zone_color": zone_info["color"],
+                "cadence": int(round(self.cadence)) if self.cadence is not None else None,
+                "avg_cadence": avg_cad,
+                "max_cadence": int(round(self.max_cadence)) if self.max_cadence > 0 else None,
+                "speed_mph": round(speed_val, 1) if speed_val is not None else None,
+                "avg_speed_mph": avg_spd_mph,
+                "max_speed_mph": round(self.max_speed_mph, 1) if self.max_speed_mph > 0 else None,
+                "speed_kmh": round(speed_kmh, 1) if speed_kmh is not None else None,
+                "avg_speed_kmh": avg_spd_kmh,
+                "max_speed_kmh": max_spd_kmh,
+                "distance_mi": round(self.distance_miles, 2),
+                "distance_km": round(dist_km, 2),
+                "calories": int(round(self.calories)),
+                "elapsed_sec": elapsed,
+                "is_running": self.is_running,
+                "sensors": self.sensors,
+                "status": self.status,
+                "playlist_id": self.playlist_id,
+            }
+
+
+# Embedded HTML/CSS/JS Studio Web App
+INDEX_HTML = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spin Studio — Live Telemetry & Workout HUD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0a0c10;
+      --glass-bg: rgba(15, 23, 42, 0.65);
+      --glass-border: rgba(255, 255, 255, 0.12);
+      --glass-glow: rgba(56, 189, 248, 0.2);
+      --accent-cyan: #00e5ff;
+      --accent-orange: #ff6d00;
+      --accent-green: #00e676;
+      --accent-red: #ff1744;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      overflow: hidden;
+    }
+
+    #video-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+      background: #000;
+    }
+
+    #player {
+      width: 100%;
+      height: 100%;
+      border: none;
+      pointer-events: auto;
+    }
+
+    #hud-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 24px 32px;
+      transition: opacity 0.3s ease;
+    }
+
+    .interactive {
+      pointer-events: auto;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+    }
+
+    .brand-pill {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      padding: 10px 20px;
+      border-radius: 999px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    .brand-title {
+      font-weight: 900;
+      letter-spacing: 1.5px;
+      font-size: 14px;
+      background: linear-gradient(135deg, #00e5ff 0%, #38bdf8 50%, #818cf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-transform: uppercase;
+    }
+
+    .playlist-name {
+      font-size: 13px;
+      color: var(--text-muted);
+      border-left: 1px solid rgba(255, 255, 255, 0.2);
+      padding-left: 12px;
+      max-width: 280px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .sensor-badges {
+      display: flex;
+      gap: 8px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      padding: 6px 14px;
+      border-radius: 999px;
+    }
+
+    .sensor-tag {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .sensor-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #64748b;
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+
+    .sensor-dot.active {
+      background: var(--accent-green);
+      box-shadow: 0 0 10px var(--accent-green);
+    }
+
+    .btn-icon {
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      color: var(--text-main);
+      width: 48px;
+      height: 48px;
+      min-width: 48px;
+      min-height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 18px;
+      transition: transform 0.15s ease, background 0.2s, border-color 0.2s;
+    }
+
+    .btn-icon:hover {
+      background: rgba(255, 255, 255, 0.18);
+      border-color: rgba(255, 255, 255, 0.35);
+      transform: scale(1.06);
+    }
+
+    .btn-icon:active {
+      transform: scale(0.92);
+      background: rgba(255, 255, 255, 0.3);
+      border-color: rgba(255, 255, 255, 0.5);
+    }
+
+    .clock-pill {
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      padding: 10px 20px;
+      border-radius: 999px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    .btn-ctrl {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid var(--glass-border);
+      color: #fff;
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: bold;
+      transition: transform 0.15s ease, background 0.2s, border-color 0.2s;
+    }
+
+    .btn-ctrl:hover {
+      background: rgba(255, 255, 255, 0.25);
+      border-color: rgba(255, 255, 255, 0.45);
+      transform: scale(1.08);
+    }
+
+    .btn-ctrl:active {
+      transform: scale(0.90);
+      background: rgba(255, 255, 255, 0.38);
+    }
+
+    .unit-pill {
+      background: rgba(0, 229, 255, 0.15);
+      border: 1px solid rgba(0, 229, 255, 0.45);
+      color: var(--accent-cyan);
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 32px;
+      transition: all 0.2s;
+    }
+
+    .unit-pill:hover {
+      background: rgba(0, 229, 255, 0.28);
+      box-shadow: 0 0 14px rgba(0, 229, 255, 0.35);
+      transform: scale(1.05);
+    }
+
+    .unit-pill:active {
+      transform: scale(0.92);
+      background: rgba(0, 229, 255, 0.45);
+    }
+
+    .telemetry-dock {
+      display: flex;
+      justify-content: center;
+      align-items: stretch;
+      gap: 16px;
+      width: 100%;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    .telemetry-card {
+      flex: 1;
+      background: rgba(10, 15, 29, 0.72);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      transition: transform 0.2s, border-color 0.3s;
+    }
+
+    .telemetry-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: transparent;
+      transition: background 0.3s;
+    }
+
+    .telemetry-card.cadence-card::before { background: linear-gradient(90deg, #00e5ff, transparent); }
+    .telemetry-card.speed-card::before { background: linear-gradient(90deg, #38bdf8, transparent); }
+    .telemetry-card.hr-card::before { background: linear-gradient(90deg, var(--hr-accent, #ff6d00), transparent); }
+    .telemetry-card.timer-card::before { background: linear-gradient(90deg, #a855f7, transparent); }
+
+    .card-label {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-main {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin: 8px 0;
+    }
+
+    .card-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 52px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -1px;
+      color: #fff;
+    }
+
+    .card-unit {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .crank-icon {
+      width: 22px;
+      height: 22px;
+      display: inline-block;
+      transition: transform 0.1s linear;
+    }
+
+    .zone-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      background: rgba(255, 109, 0, 0.18);
+      color: #ff9100;
+      border: 1px solid rgba(255, 109, 0, 0.4);
+      transition: all 0.3s;
+    }
+
+    .heart-icon {
+      display: inline-block;
+      animation: heart-beat 1s infinite ease-in-out;
+    }
+
+    @keyframes heart-beat {
+      0% { transform: scale(1); }
+      14% { transform: scale(1.25); }
+      28% { transform: scale(1); }
+      42% { transform: scale(1.15); }
+      70% { transform: scale(1); }
+    }
+
+    .yt-container {
+      position: absolute;
+      top: 90px;
+      right: 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      max-width: 440px;
+      width: calc(100vw - 64px);
+      z-index: 50;
+    }
+
+    .yt-quick-bar {
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    }
+
+    .yt-icon {
+      color: #ff0000;
+      font-size: 24px;
+    }
+
+    .yt-info {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .yt-title {
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .yt-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .yt-ctrls {
+      display: flex;
+      gap: 8px;
+    }
+
+    .yt-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid var(--glass-border);
+      color: #fff;
+      border-radius: 12px;
+      padding: 10px 14px;
+      min-width: 44px;
+      min-height: 44px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.15s ease, background 0.2s;
+    }
+
+    .yt-btn:hover {
+      background: rgba(255, 255, 255, 0.25);
+      transform: scale(1.06);
+    }
+
+    .yt-btn:active {
+      transform: scale(0.92);
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    .yt-playlist-drawer {
+      display: none;
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      margin-top: 8px;
+      width: 100%;
+      max-height: 320px;
+      overflow-y: auto;
+      box-shadow: 0 16px 45px rgba(0,0,0,0.75);
+      padding: 8px;
+    }
+
+    .yt-playlist-drawer.open {
+      display: block;
+    }
+
+    .playlist-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      margin-bottom: 6px;
+    }
+
+    .playlist-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+      transition: all 0.2s;
+      min-height: 44px;
+    }
+
+    .playlist-item:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .playlist-item:active {
+      transform: scale(0.98);
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .playlist-item.active {
+      background: rgba(0, 229, 255, 0.18);
+      border: 1px solid rgba(0, 229, 255, 0.4);
+      color: var(--accent-cyan);
+      font-weight: 700;
+    }
+
+    .playlist-item-idx {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+      min-width: 24px;
+    }
+
+    .playlist-item.active .playlist-item-idx {
+      color: var(--accent-cyan);
+    }
+
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-box {
+      background: #0f172a;
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      padding: 28px;
+      width: 460px;
+      max-width: 92%;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+
+    .form-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 16px;
+      min-height: 48px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 16px rgba(0, 229, 255, 0.3);
+    }
+
+    .btn-primary {
+      width: 100%;
+      background: linear-gradient(135deg, #00e5ff, #0088ff);
+      border: none;
+      color: #000;
+      font-weight: 800;
+      padding: 14px;
+      min-height: 52px;
+      font-size: 16px;
+      border-radius: 14px;
+      cursor: pointer;
+      margin-top: 12px;
+      transition: transform 0.15s ease, filter 0.2s;
+    }
+
+    .btn-primary:hover {
+      filter: brightness(1.1);
+      transform: scale(1.02);
+    }
+
+    .btn-primary:active {
+      transform: scale(0.96);
+      filter: brightness(0.95);
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 18px 0;
+    }
+
+    .summary-stat-box {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 12px 14px;
+    }
+
+    .summary-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .summary-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px;
+      font-weight: 800;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Fullscreen YouTube Video Embed -->
+  <div id="video-container">
+    <div id="player"></div>
+  </div>
+
+  <!-- HUD Telemetry Layer -->
+  <div id="hud-overlay">
+    
+    <!-- Top Bar -->
+    <div class="top-bar">
+      <div class="brand-pill interactive">
+        <div class="brand-title">🚴 Spin Studio</div>
+        <div id="playlist-title" class="playlist-name">High Energy Spin Mix</div>
+      </div>
+
+      <div class="top-actions interactive">
+        <div class="sensor-badges">
+          <div class="sensor-tag"><span id="dot-hr" class="sensor-dot"></span> HR</div>
+          <div class="sensor-tag"><span id="dot-cad" class="sensor-dot"></span> CAD</div>
+          <div class="sensor-tag"><span id="dot-spd" class="sensor-dot"></span> SPD</div>
+        </div>
+        <div class="clock-pill" id="top-clock">--:--</div>
+        <button id="btn-summary" class="btn-icon" title="Workout Summary (S)">📊</button>
+        <button id="btn-settings" class="btn-icon" title="Settings">⚙️</button>
+        <button id="btn-fs" class="btn-icon" title="Fullscreen (F)">⛶</button>
+      </div>
+    </div>
+
+    <!-- YouTube Quick Controls & Playlist Drawer -->
+    <div class="yt-container interactive">
+      <div class="yt-quick-bar">
+        <div class="yt-icon">▶</div>
+        <div class="yt-info">
+          <div id="yt-now-playing" class="yt-title">Loading Spin Playlist…</div>
+          <div id="yt-status-sub" class="yt-sub">Press Space to Play/Pause</div>
+        </div>
+        <div class="yt-ctrls">
+          <button id="btn-prev" class="yt-btn" title="Previous Track (P)">⏮</button>
+          <button id="btn-play" class="yt-btn" title="Play/Pause (Space)">⏯</button>
+          <button id="btn-next" class="yt-btn" title="Next Track (N)">⏭</button>
+          <button id="btn-playlist-toggle" class="yt-btn" title="Expand Playlist Tracks">📑 <span id="yt-track-count">List</span> ▾</button>
+        </div>
+      </div>
+
+      <!-- Dropdown Playlist Drawer -->
+      <div id="yt-playlist-drawer" class="yt-playlist-drawer">
+        <div class="playlist-header">
+          <span>Workout Playlist Tracks</span>
+          <span id="playlist-index-badge" style="color:var(--accent-cyan); font-family:'JetBrains Mono'">Track 1</span>
+        </div>
+        <div id="playlist-items-container">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Telemetry HUD Dock -->
+    <div class="telemetry-dock interactive">
+      
+      <!-- Cadence Pod -->
+      <div class="telemetry-card cadence-card">
+        <div class="card-label">
+          <span>Cadence</span>
+          <svg class="crank-icon" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" stroke-width="2">
+            <circle cx="12" cy="12" r="8"></circle>
+            <path d="M12 12 L16 8"></path>
+          </svg>
+        </div>
+        <div class="card-main">
+          <span id="val-cadence" class="card-value">—</span>
+          <span class="card-unit">RPM</span>
+        </div>
+        <div class="card-footer">
+          <span>Avg <b id="val-avg-cad">—</b> · Max <b id="val-max-cad">—</b></span>
+          <span id="cad-state">Searching…</span>
+        </div>
+      </div>
+
+      <!-- Speed & Distance Pod -->
+      <div class="telemetry-card speed-card">
+        <div class="card-label">
+          <span>Speed</span>
+          <span id="unit-toggle" class="unit-pill">MPH</span>
+        </div>
+        <div class="card-main">
+          <span id="val-speed" class="card-value">—</span>
+          <span id="label-speed-unit" class="card-unit">MPH</span>
+        </div>
+        <div class="card-footer">
+          <span>Avg <b id="val-avg-spd">—</b> · Max <b id="val-max-spd">—</b></span>
+          <span id="val-distance" style="font-family:'JetBrains Mono'; font-weight:700; color:#fff">0.00 mi</span>
+        </div>
+      </div>
+
+      <!-- Heart Rate Pod -->
+      <div id="hr-card" class="telemetry-card hr-card">
+        <div class="card-label">
+          <span>Heart Rate</span>
+          <span class="heart-icon">❤️</span>
+        </div>
+        <div class="card-main">
+          <span id="val-hr" class="card-value">—</span>
+          <span class="card-unit">BPM</span>
+        </div>
+        <div class="card-footer">
+          <span id="val-hr-zone" class="zone-pill">Zone — : Ready</span>
+          <span>Avg <b id="val-avg-hr">—</b> · Max <b id="val-max-hr">—</b></span>
+        </div>
+      </div>
+
+      <!-- Timer & Calories Pod -->
+      <div class="telemetry-card timer-card">
+        <div class="card-label">
+          <span>Workout Time</span>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <button id="btn-timer-toggle" class="btn-ctrl" title="Start / Pause Workout">⏸</button>
+            <button id="btn-reset-timer" class="btn-ctrl" title="Reset Workout">↺</button>
+          </div>
+        </div>
+        <div class="card-main">
+          <span id="val-timer" class="card-value">0:00</span>
+        </div>
+        <div class="card-footer">
+          <span id="workout-status">Active Session</span>
+          <span style="color:var(--accent-orange); font-weight:700; font-family:'JetBrains Mono'">🔥 <b id="val-calories">0</b> kcal</span>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">Spin Studio Settings</h3>
+        <button id="btn-close-modal" class="btn-icon">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">YouTube Playlist ID or URL</label>
+        <input type="text" id="input-playlist" class="form-input" value="__PLAYLIST_ID__">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Wheel Circumference (mm)</label>
+        <input type="number" id="input-wheel" class="form-input" value="1436">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Max Heart Rate (BPM)</label>
+        <input type="number" id="input-maxhr" class="form-input" value="190">
+      </div>
+      <button id="btn-save-settings" class="btn-primary">Save & Apply</button>
+    </div>
+  </div>
+
+  <!-- Summary Modal -->
+  <div id="summary-modal" class="modal-backdrop">
+    <div class="modal-box" style="width: 500px;">
+      <div class="modal-header">
+        <h3 class="modal-title">🏆 Workout Summary</h3>
+        <button id="btn-close-summary" class="btn-icon">✕</button>
+      </div>
+      <div class="summary-grid">
+        <div class="summary-stat-box">
+          <div class="summary-label">Duration</div>
+          <div id="sum-duration" class="summary-val">0:00</div>
+        </div>
+        <div class="summary-stat-box">
+          <div class="summary-label">Distance</div>
+          <div id="sum-distance" class="summary-val">0.00 mi</div>
+        </div>
+        <div class="summary-stat-box">
+          <div class="summary-label">Active Calories</div>
+          <div id="sum-calories" class="summary-val" style="color:var(--accent-orange)">0 kcal</div>
+        </div>
+        <div class="summary-stat-box">
+          <div class="summary-label">Heart Rate (Avg / Max)</div>
+          <div id="sum-hr" class="summary-val">— / — BPM</div>
+        </div>
+        <div class="summary-stat-box">
+          <div class="summary-label">Cadence (Avg / Max)</div>
+          <div id="sum-cad" class="summary-val">— / — RPM</div>
+        </div>
+        <div class="summary-stat-box">
+          <div class="summary-label">Speed (Avg / Max)</div>
+          <div id="sum-spd" class="summary-val">— / — MPH</div>
+        </div>
+      </div>
+      <button id="btn-done-summary" class="btn-primary">Awesome Ride!</button>
+    </div>
+  </div>
+
+  <!-- YouTube IFrame API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    let player;
+    let playlistId = "__PLAYLIST_ID__";
+    let isImperial = true;
+    let crankAngle = 0;
+
+    function onYouTubeIframeAPIReady() {
+      player = new YT.Player('player', {
+        playerVars: {
+          listType: 'playlist',
+          list: playlistId,
+          autoplay: 1,
+          controls: 1,
+          rel: 0,
+          modestbranding: 1,
+          iv_load_policy: 3,
+          playsinline: 1
+        },
+        events: {
+          'onReady': onPlayerReady,
+          'onStateChange': onPlayerStateChange
+        }
+      });
+    }
+
+    function onPlayerReady(event) {
+      event.target.playVideo();
+      updateVideoTitle();
+      setTimeout(renderPlaylist, 1000);
+    }
+
+    function onPlayerStateChange(event) {
+      updateVideoTitle();
+      const playBtn = document.getElementById('btn-play');
+      if (event.data === YT.PlayerState.PLAYING) {
+        playBtn.textContent = '⏸';
+      } else {
+        playBtn.textContent = '▶';
+      }
+      renderPlaylist();
+    }
+
+    function updateVideoTitle() {
+      if (player && player.getVideoData) {
+        const data = player.getVideoData();
+        if (data && data.title) {
+          document.getElementById('yt-now-playing').textContent = data.title;
+        }
+      }
+    }
+
+    function togglePlaylistDrawer(forceState) {
+      const drawer = document.getElementById('yt-playlist-drawer');
+      if (forceState !== undefined) {
+        drawer.classList.toggle('open', forceState);
+      } else {
+        drawer.classList.toggle('open');
+      }
+      if (drawer.classList.contains('open')) {
+        renderPlaylist();
+      }
+    }
+
+    function renderPlaylist() {
+      if (!player || !player.getPlaylist) return;
+      const playlist = player.getPlaylist();
+      if (!playlist || playlist.length === 0) return;
+
+      const currentIndex = (player.getPlaylistIndex && player.getPlaylistIndex() >= 0) ? player.getPlaylistIndex() : 0;
+      const trackCountEl = document.getElementById('yt-track-count');
+      if (trackCountEl) trackCountEl.textContent = `${playlist.length}`;
+
+      const badgeEl = document.getElementById('playlist-index-badge');
+      if (badgeEl) badgeEl.textContent = `Track ${currentIndex + 1} of ${playlist.length}`;
+
+      const container = document.getElementById('playlist-items-container');
+      container.innerHTML = '';
+
+      playlist.forEach((vidId, idx) => {
+        const item = document.createElement('div');
+        item.className = 'playlist-item' + (idx === currentIndex ? ' active' : '');
+
+        const num = document.createElement('span');
+        num.className = 'playlist-item-idx';
+        num.textContent = (idx === currentIndex) ? '▶' : `#${idx + 1}`;
+
+        const title = document.createElement('span');
+        title.style.flex = '1';
+        title.style.overflow = 'hidden';
+        title.style.textOverflow = 'ellipsis';
+        title.style.whiteSpace = 'nowrap';
+        title.textContent = (idx === currentIndex && player.getVideoData && player.getVideoData().title) 
+          ? player.getVideoData().title 
+          : `Track ${idx + 1} (${vidId})`;
+
+        item.appendChild(num);
+        item.appendChild(title);
+
+        item.onclick = (e) => {
+          e.stopPropagation();
+          if (player.playVideoAt) {
+            player.playVideoAt(idx);
+          }
+          togglePlaylistDrawer(false);
+        };
+
+        container.appendChild(item);
+      });
+    }
+
+    function initTelemetry() {
+      const evtSource = new EventSource('/api/telemetry');
+
+      evtSource.onmessage = function(e) {
+        try {
+          const d = JSON.parse(e.data);
+          updateHUD(d);
+        } catch (err) {
+          console.error("Parse error", err);
+        }
+      };
+
+      evtSource.onerror = function() {
+        document.getElementById('workout-status').textContent = 'Connecting…';
+      };
+    }
+
+    let latestSnapshot = null;
+
+    function updateHUD(d) {
+      latestSnapshot = d;
+
+      // Cadence
+      const cadEl = document.getElementById('val-cadence');
+      if (d.cadence !== null && d.cadence !== undefined) {
+        cadEl.textContent = d.cadence;
+        rotateCrank(d.cadence);
+      } else {
+        cadEl.textContent = '—';
+      }
+      document.getElementById('val-avg-cad').textContent = d.avg_cadence !== null && d.avg_cadence !== undefined ? d.avg_cadence : '—';
+      document.getElementById('val-max-cad').textContent = d.max_cadence !== null && d.max_cadence !== undefined ? d.max_cadence : '—';
+
+      // Speed & Distance
+      const spdEl = document.getElementById('val-speed');
+      const distEl = document.getElementById('val-distance');
+      if (isImperial) {
+        spdEl.textContent = d.speed_mph !== null ? d.speed_mph.toFixed(1) : '—';
+        distEl.textContent = d.distance_mi.toFixed(2) + ' mi';
+        document.getElementById('val-avg-spd').textContent = d.avg_speed_mph !== null && d.avg_speed_mph !== undefined ? d.avg_speed_mph.toFixed(1) : '—';
+        document.getElementById('val-max-spd').textContent = d.max_speed_mph !== null && d.max_speed_mph !== undefined ? d.max_speed_mph.toFixed(1) : '—';
+      } else {
+        spdEl.textContent = d.speed_kmh !== null ? d.speed_kmh.toFixed(1) : '—';
+        distEl.textContent = d.distance_km.toFixed(2) + ' km';
+        document.getElementById('val-avg-spd').textContent = d.avg_speed_kmh !== null && d.avg_speed_kmh !== undefined ? d.avg_speed_kmh.toFixed(1) : '—';
+        document.getElementById('val-max-spd').textContent = d.max_speed_kmh !== null && d.max_speed_kmh !== undefined ? d.max_speed_kmh.toFixed(1) : '—';
+      }
+
+      // Heart Rate & Zone
+      const hrEl = document.getElementById('val-hr');
+      const zoneEl = document.getElementById('val-hr-zone');
+      const hrCard = document.getElementById('hr-card');
+
+      if (d.hr !== null && d.hr !== undefined && d.hr > 0) {
+        hrEl.textContent = d.hr;
+        zoneEl.textContent = `Zone ${d.hr_zone}: ${d.hr_zone_name}`;
+        zoneEl.style.color = d.hr_zone_color;
+        zoneEl.style.borderColor = d.hr_zone_color;
+        zoneEl.style.backgroundColor = d.hr_zone_color + '25';
+        hrCard.style.setProperty('--hr-accent', d.hr_zone_color);
+      } else {
+        hrEl.textContent = '—';
+        zoneEl.textContent = 'Zone — : Ready';
+        zoneEl.style.color = '#ff9100';
+      }
+      document.getElementById('val-avg-hr').textContent = d.avg_hr !== null && d.avg_hr !== undefined ? d.avg_hr : '—';
+      document.getElementById('val-max-hr').textContent = d.max_hr !== null && d.max_hr !== undefined ? d.max_hr : '—';
+
+      // Timer & Calories
+      const elapsed = d.elapsed_sec || 0;
+      const mins = Math.floor(elapsed / 60);
+      const secs = elapsed % 60;
+      document.getElementById('val-timer').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+      document.getElementById('val-calories').textContent = d.calories || 0;
+
+      const toggleBtn = document.getElementById('btn-timer-toggle');
+      const workoutStatusEl = document.getElementById('workout-status');
+      if (d.is_running) {
+        toggleBtn.textContent = '⏸';
+        toggleBtn.title = 'Pause Workout Timer';
+        workoutStatusEl.textContent = 'Active Session';
+        workoutStatusEl.style.color = 'var(--text-muted)';
+      } else {
+        toggleBtn.textContent = '▶';
+        toggleBtn.title = 'Start / Resume Workout Timer';
+        workoutStatusEl.textContent = 'Workout Paused';
+        workoutStatusEl.style.color = '#f59e0b';
+      }
+
+      // Sensor Status Dots & Tooltips
+      if (d.sensors) {
+        const dotHr = document.getElementById('dot-hr');
+        const dotCad = document.getElementById('dot-cad');
+        const dotSpd = document.getElementById('dot-spd');
+
+        dotHr.classList.toggle('active', !!(d.sensors.hr && d.sensors.hr.connected));
+        dotCad.classList.toggle('active', !!(d.sensors.cadence && d.sensors.cadence.connected));
+        dotSpd.classList.toggle('active', !!(d.sensors.speed && d.sensors.speed.connected));
+
+        if (d.sensors.hr) dotHr.parentElement.title = `HR: ${d.sensors.hr.name}`;
+        if (d.sensors.cadence) dotCad.parentElement.title = `CAD: ${d.sensors.cadence.name}`;
+        if (d.sensors.speed) dotSpd.parentElement.title = `SPD: ${d.sensors.speed.name}`;
+      }
+
+      // System Status
+      if (d.status) {
+        document.getElementById('cad-state').textContent = d.status;
+      }
+    }
+
+    function rotateCrank(rpm) {
+      if (rpm <= 0) return;
+      crankAngle = (crankAngle + (rpm / 60) * 36) % 360;
+      document.querySelector('.crank-icon').style.transform = `rotate(${crankAngle}deg)`;
+    }
+
+    function showSummary() {
+      if (!latestSnapshot) return;
+      const d = latestSnapshot;
+      const elapsed = d.elapsed_sec || 0;
+      const mins = Math.floor(elapsed / 60);
+      const secs = elapsed % 60;
+      document.getElementById('sum-duration').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+      document.getElementById('sum-distance').textContent = isImperial ? `${d.distance_mi.toFixed(2)} mi` : `${d.distance_km.toFixed(2)} km`;
+      document.getElementById('sum-calories').textContent = `${d.calories || 0} kcal`;
+      document.getElementById('sum-hr').textContent = `${d.avg_hr || '—'} / ${d.max_hr || '—'} BPM`;
+      document.getElementById('sum-cad').textContent = `${d.avg_cadence || '—'} / ${d.max_cadence || '—'} RPM`;
+      const avgS = isImperial ? d.avg_speed_mph : d.avg_speed_kmh;
+      const maxS = isImperial ? d.max_speed_mph : d.max_speed_kmh;
+      const u = isImperial ? 'MPH' : 'KM/H';
+      document.getElementById('sum-spd').textContent = `${avgS !== null ? avgS.toFixed(1) : '—'} / ${maxS !== null ? maxS.toFixed(1) : '—'} ${u}`;
+      document.getElementById('summary-modal').classList.add('open');
+    }
+
+    function closeSummary() {
+      document.getElementById('summary-modal').classList.remove('open');
+    }
+
+    // Keyboard Shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        togglePlay();
+      } else if (e.code === 'KeyN') {
+        nextVideo();
+      } else if (e.code === 'KeyP') {
+        prevVideo();
+      } else if (e.code === 'KeyF') {
+        toggleFullscreen();
+      } else if (e.code === 'KeyH') {
+        toggleHUD();
+      } else if (e.code === 'KeyS') {
+        const sm = document.getElementById('summary-modal');
+        if (sm.classList.contains('open')) closeSummary(); else showSummary();
+      }
+    });
+
+    function togglePlay() {
+      if (!player) return;
+      const state = player.getPlayerState();
+      if (state === YT.PlayerState.PLAYING) {
+        player.pauseVideo();
+      } else {
+        player.playVideo();
+      }
+    }
+
+    function nextVideo() { if (player && player.nextVideo) player.nextVideo(); }
+    function prevVideo() { if (player && player.previousVideo) player.previousVideo(); }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    function toggleHUD() {
+      const hud = document.getElementById('hud-overlay');
+      hud.style.opacity = hud.style.opacity === '0' ? '1' : '0';
+    }
+
+    // Wire Buttons
+    document.getElementById('btn-play').onclick = togglePlay;
+    document.getElementById('btn-next').onclick = nextVideo;
+    document.getElementById('btn-prev').onclick = prevVideo;
+    document.getElementById('btn-fs').onclick = toggleFullscreen;
+    document.getElementById('btn-playlist-toggle').onclick = (e) => {
+      e.stopPropagation();
+      togglePlaylistDrawer();
+    };
+
+    document.addEventListener('click', (e) => {
+      const drawer = document.getElementById('yt-playlist-drawer');
+      const toggle = document.getElementById('btn-playlist-toggle');
+      if (drawer && drawer.classList.contains('open') && !drawer.contains(e.target) && !toggle.contains(e.target)) {
+        drawer.classList.remove('open');
+      }
+    });
+
+    document.getElementById('btn-summary').onclick = showSummary;
+    document.getElementById('btn-close-summary').onclick = closeSummary;
+    document.getElementById('btn-done-summary').onclick = closeSummary;
+
+    document.getElementById('btn-timer-toggle').onclick = () => {
+      fetch('/api/workout/toggle', { method: 'POST' });
+    };
+
+    document.getElementById('btn-reset-timer').onclick = () => {
+      fetch('/api/workout/reset', { method: 'POST' });
+    };
+
+    document.getElementById('unit-toggle').onclick = () => {
+      isImperial = !isImperial;
+      const unit = isImperial ? 'MPH' : 'KM/H';
+      document.getElementById('unit-toggle').textContent = unit;
+      document.getElementById('label-speed-unit').textContent = unit;
+    };
+
+    // Settings Modal
+    const modal = document.getElementById('settings-modal');
+    document.getElementById('btn-settings').onclick = () => modal.classList.add('open');
+    document.getElementById('btn-close-modal').onclick = () => modal.classList.remove('open');
+    
+    document.getElementById('btn-save-settings').onclick = () => {
+      const pl = document.getElementById('input-playlist').value.trim();
+      const wheel = parseFloat(document.getElementById('input-wheel').value);
+      const maxhr = parseInt(document.getElementById('input-maxhr').value);
+      
+      fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({playlist_id: pl, wheel_circ_mm: wheel, max_hr: maxhr})
+      }).then(() => {
+        modal.classList.remove('open');
+        if (pl && pl !== playlistId) {
+          playlistId = pl;
+          if (player && player.loadPlaylist) {
+            player.loadPlaylist({list: pl, listType: 'playlist'});
+          }
+        }
+      });
+    };
+
+    // Live Clocks
+    function updateClock() {
+      const d = new Date();
+      const h = d.getHours();
+      const m = d.getMinutes().toString().padStart(2, '0');
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      const topClock = document.getElementById('top-clock');
+      if (topClock) topClock.textContent = `${h12}:${m} ${ampm}`;
+      const bottomClock = document.getElementById('clock-time');
+      if (bottomClock) bottomClock.textContent = `${h.toString().padStart(2, '0')}:${m}`;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    initTelemetry();
+  </script>
+</body>
+</html>
+"""
+
+
+async def handle_http_request(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, state: WorkoutState) -> None:
+    """Lightweight built-in HTTP and SSE server."""
+    try:
+        req_line = await reader.readline()
+        if not req_line:
+            writer.close()
+            return
+        parts = req_line.decode("utf-8", errors="ignore").split()
+        if len(parts) < 2:
+            writer.close()
+            return
+        method, path = parts[0], parts[1]
+
+        # Read headers
+        content_length = 0
+        while True:
+            line = await reader.readline()
+            if not line or line == b"\r\n" or line == b"\n":
+                break
+            if line.lower().startswith(b"content-length:"):
+                try:
+                    content_length = int(line.split(b":")[1].strip())
+                except ValueError:
+                    pass
+
+        body = b""
+        if content_length > 0:
+            body = await reader.readexactly(content_length)
+
+        # Route endpoints
+        if path == "/" or path.startswith("/index.html"):
+            rendered = INDEX_HTML.replace("__PLAYLIST_ID__", state.playlist_id)
+            content = rendered.encode("utf-8")
+            resp = (
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Type: text/html; charset=utf-8\r\n"
+                b"Content-Length: " + str(len(content)).encode() + b"\r\n"
+                b"Connection: close\r\n\r\n" + content
+            )
+            writer.write(resp)
+            await writer.drain()
+            writer.close()
+
+        elif path == "/api/telemetry":
+            header = (
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Type: text/event-stream\r\n"
+                b"Cache-Control: no-cache\r\n"
+                b"Connection: keep-alive\r\n"
+                b"Access-Control-Allow-Origin: *\r\n\r\n"
+            )
+            writer.write(header)
+            await writer.drain()
+
+            while not writer.is_closing():
+                snap = state.get_snapshot()
+                data = f"data: {json.dumps(snap)}\n\n".encode("utf-8")
+                try:
+                    writer.write(data)
+                    await writer.drain()
+                except Exception:
+                    break
+                await asyncio.sleep(0.2)  # 5Hz update rate
+
+        elif path == "/api/workout/reset" and method == "POST":
+            state.reset_workout()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"ok\":true}")
+            await writer.drain()
+            writer.close()
+
+        elif path == "/api/workout/toggle" and method == "POST":
+            running = state.toggle_workout_timer()
+            writer.write(f"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{{\"running\":{str(running).lower()}}}".encode())
+            await writer.drain()
+            writer.close()
+
+        elif path == "/api/settings" and method == "POST":
+            try:
+                data = json.loads(body.decode("utf-8")) if body else {}
+                errors = []
+
+                new_pl = state.playlist_id
+                if "playlist_id" in data:
+                    pl = str(data["playlist_id"]).strip()
+                    if "list=" in pl:
+                        pl = pl.split("list=")[1].split("&")[0]
+                    if pl:
+                        new_pl = pl
+                    else:
+                        errors.append("Playlist ID cannot be empty")
+
+                new_circ = state.wheel_circ_m
+                if "wheel_circ_mm" in data:
+                    try:
+                        circ_val = float(data["wheel_circ_mm"])
+                        if math.isfinite(circ_val) and 500 <= circ_val <= 3500:
+                            new_circ = circ_val / 1000.0
+                        else:
+                            errors.append("Wheel circumference must be between 500mm and 3500mm")
+                    except (ValueError, TypeError):
+                        errors.append("Invalid wheel circumference")
+
+                new_maxhr = state.max_hr
+                if "max_hr" in data:
+                    try:
+                        mhr_val = int(data["max_hr"])
+                        if 80 <= mhr_val <= 240:
+                            new_maxhr = mhr_val
+                        else:
+                            errors.append("Max HR must be between 80 and 240 BPM")
+                    except (ValueError, TypeError):
+                        errors.append("Invalid max HR")
+
+                if errors:
+                    err_json = json.dumps({"ok": False, "errors": errors}).encode()
+                    writer.write(b"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n" + err_json)
+                else:
+                    state.playlist_id = new_pl
+                    state.wheel_circ_m = new_circ
+                    state.max_hr = new_maxhr
+                    writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"ok\":true}")
+                await writer.drain()
+                writer.close()
+            except Exception as e:
+                err_json = json.dumps({"ok": False, "error": str(e)}).encode()
+                writer.write(b"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n" + err_json)
+                await writer.drain()
+                writer.close()
+
+        else:
+            writer.write(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            await writer.drain()
+            writer.close()
+
+    except Exception:
+        try:
+            writer.close()
+        except Exception:
+            pass
+
+
+async def _ble_connect_loop(state: WorkoutState) -> None:
+    """Connects to Garmin HR + Magene Cadence (57177) + Magene Speed (40452) sensors independently."""
+    try:
+        from bleak import BleakClient, BleakScanner
+    except ImportError:
+        state.update_telemetry(status="Bleak not installed — install via 'pip install bleak'")
+        return
+
+    active_hr: Any = None
+    active_cad: Any = None
+    active_spd: Any = None
+
+    connecting: set[str] = set()
+    dev_cache = load_device_cache()
+
+    hr_prev_csc: tuple[int, int] | None = None
+    wheel_prev: tuple[int, int] | None = None
+    last_crank = 0.0
+    last_wheel = 0.0
+
+    async def disconnect_safe(client: Any) -> None:
+        if client:
+            try:
+                if getattr(client, "is_connected", False):
+                    await client.disconnect()
+            except Exception:
+                pass
+
+    async def connect_hr(dev, label: str) -> None:
+        nonlocal active_hr
+        connecting.add("hr")
+        try:
+            state.set_sensor("hr", False, f"Connecting {label}…")
+            c = BleakClient(dev)
+            await c.connect()
+
+            def on_hr(_, data: bytearray) -> None:
+                bpm = parse_hr(bytes(data))
+                if bpm is not None:
+                    state.update_telemetry(hr=bpm)
+
+            await c.start_notify(HR_UUID, on_hr)
+            active_hr = c
+            state.set_sensor("hr", True, label)
+            dev_cache["hr"] = getattr(dev, "address", str(dev))
+            save_device_cache(dev_cache)
+        except Exception as e:
+            active_hr = None
+            state.set_sensor("hr", False, f"Drop: {e}")
+        finally:
+            connecting.discard("hr")
+
+    async def connect_cad(dev, label: str) -> None:
+        nonlocal active_cad, hr_prev_csc, last_crank
+        connecting.add("cadence")
+        try:
+            state.set_sensor("cadence", False, f"Connecting {label}…")
+            c = BleakClient(dev)
+            await c.connect()
+
+            def on_cad_csc(_, data: bytearray) -> None:
+                nonlocal hr_prev_csc, last_crank
+                rpm, hr_prev_csc = parse_csc_crank(bytes(data), hr_prev_csc)
+                now = time.monotonic()
+                if rpm is not None:
+                    last_crank = now
+                    state.update_telemetry(cadence=rpm)
+
+            await c.start_notify(CSC_UUID, on_cad_csc)
+            active_cad = c
+            state.set_sensor("cadence", True, label)
+            dev_cache["cadence"] = getattr(dev, "address", str(dev))
+            save_device_cache(dev_cache)
+        except Exception as e:
+            active_cad = None
+            state.set_sensor("cadence", False, f"Drop: {e}")
+        finally:
+            connecting.discard("cadence")
+
+    async def connect_spd(dev, label: str) -> None:
+        nonlocal active_spd, wheel_prev, last_wheel
+        connecting.add("speed")
+        try:
+            state.set_sensor("speed", False, f"Connecting {label}…")
+            c = BleakClient(dev)
+            await c.connect()
+
+            def on_spd_csc(_, data: bytearray) -> None:
+                nonlocal wheel_prev, last_wheel
+                spd_mph, delta_mi, wheel_prev = parse_csc_wheel(bytes(data), wheel_prev, state.wheel_circ_m)
+                now = time.monotonic()
+                if spd_mph is not None:
+                    last_wheel = now
+                    state.add_distance_delta(delta_mi)
+                    state.update_telemetry(speed_mph=spd_mph)
+
+            await c.start_notify(CSC_UUID, on_spd_csc)
+            active_spd = c
+            state.set_sensor("speed", True, label)
+            dev_cache["speed"] = getattr(dev, "address", str(dev))
+            save_device_cache(dev_cache)
+        except Exception as e:
+            active_spd = None
+            state.set_sensor("speed", False, f"Drop: {e}")
+        finally:
+            connecting.discard("speed")
+
+    try:
+        # Fast startup connection to cached device MACs
+        if dev_cache.get("hr"):
+            asyncio.create_task(connect_hr(dev_cache["hr"], "Garmin HR (cached)"))
+        if dev_cache.get("cadence"):
+            asyncio.create_task(connect_cad(dev_cache["cadence"], "Cadence 57177 (cached)"))
+        if dev_cache.get("speed"):
+            asyncio.create_task(connect_spd(dev_cache["speed"], "Speed 40452 (cached)"))
+        await asyncio.sleep(1.0)
+
+        while True:
+            now = time.monotonic()
+
+            # Stale data watchdog (if sensors stop pedaling/rotating)
+            if active_cad and (now - last_crank > 3.0) and state.cadence not in (None, 0.0):
+                state.update_telemetry(cadence=0.0)
+            if active_spd and (now - last_wheel > 3.0) and state.speed_mph not in (None, 0.0):
+                state.update_telemetry(speed_mph=0.0)
+
+            # Check active clients & clean on disconnect
+            if active_hr and not getattr(active_hr, "is_connected", False):
+                await disconnect_safe(active_hr)
+                active_hr = None
+                state.set_sensor("hr", False, "Disconnected")
+                state.update_telemetry(hr=None)
+
+            if active_cad and not getattr(active_cad, "is_connected", False):
+                await disconnect_safe(active_cad)
+                active_cad = None
+                state.set_sensor("cadence", False, "Disconnected (spin crank to wake)")
+                state.update_telemetry(cadence=None)
+
+            if active_spd and not getattr(active_spd, "is_connected", False):
+                await disconnect_safe(active_spd)
+                active_spd = None
+                state.set_sensor("speed", False, "Disconnected (spin wheel to wake)")
+                state.update_telemetry(speed_mph=None)
+
+            need_hr = (active_hr is None) and ("hr" not in connecting)
+            need_cad = (active_cad is None) and ("cadence" not in connecting)
+            need_spd = (active_spd is None) and ("speed" not in connecting)
+
+            if not need_hr and not need_cad and not need_spd and not connecting:
+                state.update_telemetry(status="All sensors live")
+                await asyncio.sleep(1.5)
+                continue
+
+            # Status text
+            missing = []
+            if need_hr:
+                missing.append("Garmin HR")
+            if need_cad:
+                missing.append("Cadence (57177)")
+            if need_spd:
+                missing.append("Speed (40452)")
+            if missing:
+                state.update_telemetry(status=f"Searching: {', '.join(missing)}… (spin pedals/wheel)")
+
+            try:
+                found = await BleakScanner.discover(timeout=3.0, return_adv=True)
+            except Exception as e:
+                state.update_telemetry(status=f"Scan: {e}")
+                await asyncio.sleep(2)
+                continue
+
+            discovered_csc = []
+
+            for dev, adv in found.values():
+                uuids = {u.lower() for u in (adv.service_uuids or [])}
+                local_name = adv.local_name or dev.name or ""
+                name_lower = local_name.lower()
+                addr_lower = dev.address.lower()
+                mfr = list(adv.manufacturer_data.keys()) if adv.manufacturer_data else []
+                combined_desc = f"{name_lower} {addr_lower}"
+
+                # Match Garmin HR
+                if need_hr and (
+                    HR_SVC in uuids
+                    or 135 in mfr
+                    or any(n in name_lower for n in ("forerunner", "garmin", "fenix", "instinct", "965", "hr-", "heartrate"))
+                ):
+                    need_hr = False
+                    asyncio.create_task(connect_hr(dev, local_name or dev.address))
+
+                # Match CSC (Magene S3+, etc.)
+                is_csc_uuid = CSC_SVC in uuids
+                is_csc_name = any(n in combined_desc for n in ("magene", "s3", "57177", "40452", "cadence", "speed", "csc", "spd", "cad"))
+                if is_csc_uuid or is_csc_name:
+                    is_spd = any(k in combined_desc for k in ("40452", "spd", "speed", "wheel"))
+                    is_cad = any(k in combined_desc for k in ("57177", "cad", "cadence", "crank"))
+                    discovered_csc.append((dev, local_name or dev.address, is_spd, is_cad))
+
+            # 1. First assign explicit Speed (40452) and explicit Cadence (57177)
+            assigned_addrs = set()
+            for dev, label, is_spd, is_cad in discovered_csc:
+                if need_spd and is_spd and not is_cad:
+                    need_spd = False
+                    assigned_addrs.add(dev.address)
+                    asyncio.create_task(connect_spd(dev, label))
+                elif need_cad and is_cad and not is_spd:
+                    need_cad = False
+                    assigned_addrs.add(dev.address)
+                    asyncio.create_task(connect_cad(dev, label))
+
+            # 2. Generic fallback assignment for other unassigned CSC devices
+            for dev, label, is_spd, is_cad in discovered_csc:
+                if dev.address in assigned_addrs:
+                    continue
+                active_addrs = {getattr(active_cad, "address", None), getattr(active_spd, "address", None)}
+                if dev.address in active_addrs:
+                    continue
+
+                if need_cad:
+                    need_cad = False
+                    assigned_addrs.add(dev.address)
+                    asyncio.create_task(connect_cad(dev, label))
+                elif need_spd:
+                    need_spd = False
+                    assigned_addrs.add(dev.address)
+                    asyncio.create_task(connect_spd(dev, label))
+
+            await asyncio.sleep(1.5)
+    finally:
+        await disconnect_safe(active_hr)
+        await disconnect_safe(active_cad)
+        await disconnect_safe(active_spd)
+
+
 def _self_check() -> int:
+    """Self-check and unit test verification."""
+    # HR parser tests
     assert parse_hr(b"\x00\x8c") == 140
     assert parse_hr(b"\x01\x2c\x01") == 300
     assert parse_hr(b"") is None
+
+    # Crank CSC parser tests
     rpm, prev, mode = parse_csc(b"\x02" + struct.pack("<HH", 10, 0), None)
     assert rpm is None and mode == "crank" and prev == (10, 0)
-    # 20 revs in 10s = 10240 ticks → 120 rpm
+    # 20 revs in 10s = 10240 ticks -> 120 rpm
     rpm, prev, mode = parse_csc(b"\x02" + struct.pack("<HH", 30, 10240), prev)
     assert mode == "crank" and prev == (30, 10240)
     assert rpm is not None and abs(rpm - 120.0) < 0.01
-    rpm, _, mode = parse_csc(b"\x01" + struct.pack("<IH", 100, 0), None)
-    assert rpm is None and mode == "wheel"
-    print("self-check ok")
+
+    # Wheel CSC parser tests: delta distance and bounded checks
+    spd, delta_dist, wprev = parse_csc_wheel(b"\x01" + struct.pack("<IH", 100, 0), None, wheel_circ_m=2.10)
+    assert spd == 0.0 and delta_dist == 0.0 and wprev == (100, 0)
+
+    # 10 revs in 1024 ticks (1 sec) -> 10 * 2.1m = 21.0 m/s -> ~46.97 mph, ~0.013 miles delta
+    spd, delta_dist, wprev = parse_csc_wheel(b"\x01" + struct.pack("<IH", 110, 1024), wprev, wheel_circ_m=2.10)
+    assert spd is not None and abs(spd - 46.975) < 0.1
+    assert abs(delta_dist - 0.013) < 0.005
+
+    # Test sensor counter reboot / massive discontinuity protection
+    spd_bogus, delta_bogus, _ = parse_csc_wheel(b"\x01" + struct.pack("<IH", 50000, 1024), wprev, wheel_circ_m=2.10)
+    assert spd_bogus == 0.0 and delta_bogus == 0.0
+
+    # HR Zone calculations & divide-by-zero protection
+    z0 = calculate_hr_zone(None, 190)
+    assert z0["zone"] == 0
+    z_zero_mhr = calculate_hr_zone(140, 0)  # Should not divide by zero
+    assert z_zero_mhr["zone"] > 0
+    z1 = calculate_hr_zone(100, 190)
+    assert z1["zone"] == 1
+    z4 = calculate_hr_zone(160, 190)
+    assert z4["zone"] == 4 and z4["name"] == "Anaerobic"
+
+    # WorkoutState test: distance accumulation & reset safety
+    st = WorkoutState()
+    st.add_distance_delta(0.5)
+    st.update_telemetry(hr=140, cadence=90.0, speed_mph=20.0)
+    snap = st.get_snapshot()
+    assert snap["distance_mi"] == 0.5
+    assert snap["hr"] == 140
+    st.reset_workout()
+    snap2 = st.get_snapshot()
+    assert snap2["distance_mi"] == 0.0
+    assert snap2["avg_hr"] is None
+    # Next delta only adds delta, not restoring previous distance
+    st.add_distance_delta(0.01)
+    snap3 = st.get_snapshot()
+    assert snap3["distance_mi"] == 0.01
+
+    print("self-check ok: all parsers, wheel speed, and zone logic validated")
     return 0
 
 
-class Hud:
-    def __init__(self) -> None:
-        import tkinter as tk
-
-        self.hr: int | None = None
-        self.rpm: float | None = None
-        self.hr_ok = False
-        self.cad_ok = False
-        self.cad_mode = ""
-        self.status = "scanning…"
-        self.started = time.monotonic()
-        self.lock = threading.Lock()
-        self.root = tk.Tk()
-        self.root.title("spin hud")
-        self.root.configure(bg="#111")
-        self.root.attributes("-topmost", True)
-        self.root.geometry("280x170+40+40")
-        self.root.resizable(False, False)
-        font_big = ("Segoe UI", 36, "bold")
-        font_lbl = ("Segoe UI", 10)
-        font_st = ("Segoe UI", 9)
-        row = tk.Frame(self.root, bg="#111")
-        row.pack(fill="both", expand=True, padx=12, pady=8)
-        left = tk.Frame(row, bg="#111")
-        right = tk.Frame(row, bg="#111")
-        left.pack(side="left", expand=True)
-        right.pack(side="left", expand=True)
-        tk.Label(left, text="HR", fg="#888", bg="#111", font=font_lbl).pack()
-        self.hr_l = tk.Label(left, text="—", fg="#fff", bg="#111", font=font_big)
-        self.hr_l.pack()
-        tk.Label(right, text="CAD", fg="#888", bg="#111", font=font_lbl).pack()
-        self.cad_l = tk.Label(right, text="—", fg="#fff", bg="#111", font=font_big)
-        self.cad_l.pack()
-        self.time_l = tk.Label(self.root, text="0:00", fg="#aaa", bg="#111", font=font_st)
-        self.time_l.pack()
-        self.st_l = tk.Label(self.root, text=self.status, fg="#666", bg="#111", font=font_st, wraplength=260)
-        self.st_l.pack(pady=(0, 6))
-        self.root.bind("<Escape>", lambda e: self.root.destroy())
-        self.root.after(200, self._tick)
-
-    def _tick(self) -> None:
-        with self.lock:
-            hr, rpm = self.hr, self.rpm
-            status = self.status
-            mode = self.cad_mode
-        elapsed = int(time.monotonic() - self.started)
-        self.hr_l.config(text="—" if hr is None else str(hr))
-        if rpm is None:
-            self.cad_l.config(text="spd?" if mode == "wheel" else "—")
-        else:
-            self.cad_l.config(text=str(int(round(rpm))))
-        self.time_l.config(text=f"{elapsed // 60}:{elapsed % 60:02d}")
-        self.st_l.config(text=status)
-        self.root.after(200, self._tick)
-
-    def set(self, **kwargs) -> None:
-        with self.lock:
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-
-    def run(self) -> None:
-        self.root.mainloop()
-
-
-async def _scan(seconds: float = 8.0):
+async def _scan(seconds: float = 8.0) -> None:
     from bleak import BleakScanner
 
-    print(f"scanning {seconds:.0f}s — spin the crank, start HR broadcast on the 965")
+    print(f"Scanning {seconds:.0f}s — spin the cranks/wheels and start HR broadcast on 965...")
     devices = await BleakScanner.discover(timeout=seconds, return_adv=True)
     for dev, adv in devices.values():
         uuids = " ".join(adv.service_uuids or [])
-        print(f"  {dev.address}  rssi={adv.rssi}  name={dev.name!r}  {uuids}")
+        name = adv.local_name or dev.name or ""
+        mfr = f"mfr={list(adv.manufacturer_data.keys())}" if adv.manufacturer_data else ""
+        print(f"  {dev.address}  rssi={adv.rssi}  name={name!r}  {uuids}  {mfr}")
 
 
-async def _connect_loop(hud: Hud) -> None:
-    from bleak import BleakClient, BleakScanner
+def run_server(port: int = 8080, playlist_id: str = DEFAULT_PLAYLIST_ID, host: str = "127.0.0.1", no_browser: bool = False) -> None:
+    state = WorkoutState(playlist_id=playlist_id)
 
-    hr_prev_csc: tuple[int, int] | None = None
-    last_crank = 0.0
-
-    while True:
-        hud.set(status="scanning…")
-        found = await BleakScanner.discover(timeout=8.0, return_adv=True)
-        hr_dev = cad_dev = None
-        for dev, adv in found.values():
-            uuids = {u.lower() for u in (adv.service_uuids or [])}
-            name = (dev.name or "").lower()
-            if hr_dev is None and (HR_SVC in uuids or any(n in name for n in ("forerunner", "garmin", "fenix", "instinct"))):
-                hr_dev = dev
-            if cad_dev is None and (CSC_SVC in uuids or any(n in name for n in ("magene", "s3", "cadence"))):
-                cad_dev = dev
-        bits = []
-        if hr_dev:
-            bits.append(f"HR {hr_dev.name or hr_dev.address}")
-        if cad_dev:
-            bits.append(f"CAD {cad_dev.name or cad_dev.address}")
-        if not bits:
-            hud.set(status="nothing found — broadcast HR + spin crank")
-            await asyncio.sleep(2)
-            continue
-        hud.set(status=" · ".join(bits))
-
-        clients: list = []
-
-        def on_hr(_, data: bytearray) -> None:
-            bpm = parse_hr(bytes(data))
-            if bpm is not None:
-                hud.set(hr=bpm, hr_ok=True)
-
-        def on_csc(_, data: bytearray) -> None:
-            nonlocal hr_prev_csc, last_crank
-            rpm, hr_prev_csc, mode = parse_csc(bytes(data), hr_prev_csc)
-            now = time.monotonic()
-            if rpm is not None:
-                last_crank = now
-                hud.set(rpm=rpm, cad_ok=True, cad_mode=mode)
-            elif mode == "wheel":
-                hud.set(cad_mode="wheel", status="Magene is in SPEED mode — pop battery, want red flash")
-            elif now - last_crank > 3 and hud.rpm is not None:
-                hud.set(rpm=0.0, cad_mode=mode)
-
+    async def main_async():
         try:
-            if hr_dev:
-                c = BleakClient(hr_dev)
-                await c.connect()
-                await c.start_notify(HR_UUID, on_hr)
-                clients.append(c)
-            if cad_dev:
-                c = BleakClient(cad_dev)
-                await c.connect()
-                await c.start_notify(CSC_UUID, on_csc)
-                clients.append(c)
-            hud.set(status=" · ".join(bits) + "  live")
-            while all(c.is_connected for c in clients):
-                await asyncio.sleep(1)
-        except Exception as e:
-            hud.set(status=f"drop: {e}")
-        finally:
-            for c in clients:
-                try:
-                    await c.disconnect()
-                except Exception:
-                    pass
-        hud.set(hr_ok=False, cad_ok=False)
-        await asyncio.sleep(1)
+            server = await asyncio.start_server(lambda r, w: handle_http_request(r, w, state), host, port)
+        except OSError as e:
+            # WSAEADDRINUSE / Already running: open active session instead of launching colliding BLE manager
+            if getattr(e, "errno", None) in (10048, 98, 48) or "only one usage" in str(e).lower() or "address already in use" in str(e).lower():
+                url = f"http://localhost:{port}"
+                print("\n" + "=" * 56)
+                print(f"  [INFO] Spin Studio is already running at {url}")
+                print("  Opening active session in your browser...")
+                print("=" * 56 + "\n")
+                if not no_browser:
+                    webbrowser.open(url)
+                return
+            raise
+
+        display_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host
+        url = f"http://{display_host}:{port}"
+        print("\n" + "=" * 56)
+        print(f"  SPIN STUDIO LIVE: {url}")
+        print(f"  Playlist: https://youtube.com/playlist?list={state.playlist_id}")
+        print(f"  Sensors : Garmin 965 (HR) + Magene (Cadence & Speed)")
+        print("=" * 56 + "\n")
+
+        if not no_browser:
+            threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+
+        tasks = [
+            server.serve_forever(),
+            _ble_connect_loop(state),
+        ]
+        await asyncio.gather(*tasks)
+
+    try:
+        asyncio.run(main_async())
+    except KeyboardInterrupt:
+        print("\nSpin Studio stopped.")
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="965 + Magene S3+ desktop HUD")
-    p.add_argument("--scan", action="store_true")
-    p.add_argument("--self-check", action="store_true")
+    p = argparse.ArgumentParser(description="Peloton-Style Spin Studio HUD & Playlist Player")
+    p.add_argument("--scan", action="store_true", help="Scan nearby BLE sensors")
+    p.add_argument("--self-check", action="store_true", help="Run parser & engine validation")
+    p.add_argument("--port", type=int, default=8080, help="Web server port (default: 8080)")
+    p.add_argument("--lan", action="store_true", help="Listen on 0.0.0.0 for LAN access (default: 127.0.0.1)")
+    p.add_argument("--playlist", type=str, default=DEFAULT_PLAYLIST_ID, help="YouTube Playlist ID or URL")
+    p.add_argument("--no-browser", action="store_true", help="Do not automatically open browser")
     args = p.parse_args()
+
     if args.self_check:
         return _self_check()
+
     if args.scan:
         asyncio.run(_scan())
         return 0
-    hud = Hud()
 
-    def runner() -> None:
-        asyncio.run(_connect_loop(hud))
+    pl = args.playlist
+    if "list=" in pl:
+        pl = pl.split("list=")[1].split("&")[0]
 
-    threading.Thread(target=runner, daemon=True).start()
-    hud.run()
+    host = "0.0.0.0" if args.lan else "127.0.0.1"
+    run_server(port=args.port, playlist_id=pl, host=host, no_browser=args.no_browser)
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
