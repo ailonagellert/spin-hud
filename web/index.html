@@ -1037,6 +1037,23 @@
     let playlistId = "__PLAYLIST_ID__";
     let isImperial = true;
     let crankAngle = 0;
+    const videoTitleCache = {};
+
+    function fetchVideoTitle(vidId, callback) {
+      if (videoTitleCache[vidId]) {
+        callback(videoTitleCache[vidId]);
+        return;
+      }
+      fetch('/api/youtube/title?id=' + encodeURIComponent(vidId))
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.title) {
+            videoTitleCache[vidId] = data.title;
+            callback(data.title);
+          }
+        })
+        .catch(() => {});
+    }
 
     const WORKOUT_PROGRAMS = {
       open: {
@@ -1189,9 +1206,19 @@
         title.style.overflow = 'hidden';
         title.style.textOverflow = 'ellipsis';
         title.style.whiteSpace = 'nowrap';
-        title.textContent = (idx === currentIndex && player.getVideoData && player.getVideoData().title) 
-          ? player.getVideoData().title 
-          : `Track ${idx + 1} (${vidId})`;
+        
+        if (idx === currentIndex && player.getVideoData && player.getVideoData().title) {
+          const t = player.getVideoData().title;
+          videoTitleCache[vidId] = t;
+          title.textContent = t;
+        } else if (videoTitleCache[vidId]) {
+          title.textContent = videoTitleCache[vidId];
+        } else {
+          title.textContent = `Track ${idx + 1} (${vidId})`;
+          fetchVideoTitle(vidId, (realTitle) => {
+            title.textContent = realTitle;
+          });
+        }
 
         item.appendChild(num);
         item.appendChild(title);

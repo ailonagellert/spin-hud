@@ -8,9 +8,16 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"spin-hud/internal/session"
+)
+
+var (
+	titleCache   = make(map[string]string)
+	titleCacheMu sync.RWMutex
+	httpClient   = &http.Client{Timeout: 4 * time.Second}
 )
 
 type Server struct {
@@ -32,6 +39,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/workout/reset", s.handleReset)
 	mux.HandleFunc("/api/workout/toggle", s.handleToggle)
 	mux.HandleFunc("/api/settings", s.handleSettings)
+	mux.HandleFunc("/api/youtube/title", s.handleYouTubeTitle)
 	return mux
 }
 
@@ -191,6 +199,47 @@ func toInt(v any) (int, bool) {
 		return int(f), true
 	}
 	return 0, false
+}
+
+func (s *Server) handleYouTubeTitle(w http.ResponseWriter, r *http.Request) {
+	vidID := strings.TrimSpace(r.URL.Query().Get("id"))
+	if vidID == "" {
+		http.Error(w, "missing video id", http.StatusBadRequest)
+		return
+	}
+
+	titleCacheMu.RLock()
+	cached, ok := titleCache[vidID]
+	titleCacheMu.RUnlock()
+	if ok {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"title": cached})
+		return
+	}
+
+	// Fetch via YouTube oEmbed
+	resp, err := httpClient.Get(fmt.Sprintf("https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=%s&format=json", vidID))
+	if err != nil || resp.StatusCode != http.StatusOK {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"title": ""})
+		return
+	}
+	defer resp.Body.Close()
+
+	var payload struct {
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err == nil && payload.Title != "" {
+		titleCacheMu.Lock()
+		titleCache[vidID] = payload.Title
+		titleCacheMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"title": payload.Title})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"title": ""})
 }
 
 // Listen binds the listener; on WSAEADDRINUSE-style errors it returns the
