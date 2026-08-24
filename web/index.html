@@ -300,6 +300,7 @@
 
     .telemetry-card.cadence-card::before { background: linear-gradient(90deg, #00e5ff, transparent); }
     .telemetry-card.speed-card::before { background: linear-gradient(90deg, #38bdf8, transparent); }
+    .telemetry-card.power-card::before { background: linear-gradient(90deg, #f59e0b, #eab308, transparent); }
     .telemetry-card.hr-card::before { background: linear-gradient(90deg, var(--hr-accent, #ff6d00), transparent); }
     .telemetry-card.timer-card::before { background: linear-gradient(90deg, #a855f7, transparent); }
 
@@ -823,20 +824,35 @@
         </div>
       </div>
 
-      <!-- Speed & Power Pod -->
-      <div class="telemetry-card speed-card">
+      <!-- Speed Pod -->
+      <div id="speed-card" class="telemetry-card speed-card">
         <div class="card-label">
-          <span>Speed & Power</span>
+          <span>Speed</span>
           <span id="unit-toggle" class="unit-pill">MPH</span>
         </div>
         <div class="card-main">
           <span id="val-speed" class="card-value">—</span>
           <span id="label-speed-unit" class="card-unit">MPH</span>
-          <span id="val-power-badge" class="power-badge" style="margin-left:auto;">⚡ <b id="val-watts">0</b> W</span>
         </div>
         <div class="card-footer">
-          <span>Avg <b id="val-avg-spd">—</b> · <b id="val-wkg">0.0</b> W/kg</span>
+          <span>Avg <b id="val-avg-spd">—</b></span>
           <span id="val-distance" style="font-family:'JetBrains Mono'; font-weight:700; color:#fff">0.00 mi</span>
+        </div>
+      </div>
+
+      <!-- Power Meter Pod -->
+      <div id="power-card" class="telemetry-card power-card">
+        <div class="card-label">
+          <span>Power</span>
+          <span style="color:#f59e0b; font-size:16px;">⚡</span>
+        </div>
+        <div class="card-main">
+          <span id="val-watts" class="card-value">0</span>
+          <span class="card-unit">WATTS</span>
+        </div>
+        <div class="card-footer">
+          <span>Avg <b id="val-avg-watts">—</b> · Max <b id="val-max-watts">—</b></span>
+          <span style="color:var(--accent-cyan); font-family:'JetBrains Mono'; font-weight:700;"><b id="val-wkg">0.0</b> W/kg</span>
         </div>
       </div>
 
@@ -1253,8 +1269,11 @@
         document.getElementById('val-avg-spd').textContent = d.avg_speed_kmh !== null && d.avg_speed_kmh !== undefined ? d.avg_speed_kmh.toFixed(1) : '—';
       }
 
-      document.getElementById('val-watts').textContent = d.watts || 0;
+      // Power Meter
+      document.getElementById('val-watts').textContent = (d.watts !== null && d.watts !== undefined) ? d.watts : 0;
       document.getElementById('val-wkg').textContent = (d.w_kg || 0).toFixed(1);
+      document.getElementById('val-avg-watts').textContent = (d.avg_watts !== null && d.avg_watts !== undefined) ? d.avg_watts : '—';
+      document.getElementById('val-max-watts').textContent = (d.max_watts !== null && d.max_watts !== undefined) ? d.max_watts : '—';
 
       // Heart Rate & Zone
       const hrEl = document.getElementById('val-hr');
