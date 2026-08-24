@@ -308,23 +308,26 @@
     .layout-left .telemetry-dock {
       position: absolute;
       left: 32px;
-      top: 175px;
+      top: 205px;
       bottom: 24px;
-      width: 290px;
-      max-width: 290px;
+      width: 320px;
+      max-width: 320px;
       margin: 0;
       flex-direction: column;
       justify-content: flex-start;
-      gap: 10px;
+      gap: 8px;
       z-index: 40;
       overflow-y: auto;
       scrollbar-width: none;
     }
     .layout-left .telemetry-dock::-webkit-scrollbar { display: none; }
     .layout-left #interval-cue-bar {
-      width: 290px;
-      min-width: 290px;
-      max-width: 290px;
+      top: 90px;
+      left: 32px;
+      width: 320px;
+      min-width: 320px;
+      max-width: 320px;
+      z-index: 45;
     }
 
     .layout-right .telemetry-dock {
@@ -332,37 +335,48 @@
       right: 32px;
       top: 175px;
       bottom: 24px;
-      width: 290px;
-      max-width: 290px;
+      width: 320px;
+      max-width: 320px;
       margin: 0;
       flex-direction: column;
       justify-content: flex-start;
-      gap: 10px;
+      gap: 8px;
       z-index: 40;
       overflow-y: auto;
       scrollbar-width: none;
     }
     .layout-right .telemetry-dock::-webkit-scrollbar { display: none; }
     .layout-right .yt-container {
-      width: 290px;
-      max-width: 290px;
+      top: 90px;
+      right: 32px;
+      width: 320px;
+      max-width: 320px;
+      z-index: 45;
     }
 
     .layout-left .telemetry-card,
     .layout-right .telemetry-card {
       flex: 0 0 auto;
-      padding: 10px 14px;
+      padding: 8px 14px;
       border-radius: 14px;
+      min-height: 68px;
     }
 
     .layout-left .card-value,
     .layout-right .card-value {
-      font-size: 32px;
+      font-size: 28px;
+      line-height: 1;
     }
 
     .layout-left .card-main,
     .layout-right .card-main {
-      margin: 2px 0;
+      margin: 1px 0;
+      gap: 6px;
+    }
+
+    .layout-left .card-unit,
+    .layout-right .card-unit {
+      font-size: 12px;
     }
 
     .layout-left .card-footer,
