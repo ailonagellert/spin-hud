@@ -12,7 +12,7 @@ import (
 // lands (milestone 3). It keeps the tree compiling and the HTTP server useful.
 type stubManager struct{}
 
-func newManager() SensorManager { return &stubManager{} }
+func newManager() SensorManager { return newBLEManager() }
 
 func (m *stubManager) ConnectLoop(state *session.State) {
 	status := "Sensors not available in this build (BLE lands in milestone 3)"

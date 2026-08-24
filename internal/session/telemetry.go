@@ -85,3 +85,12 @@ func (s *State) UpdateTelemetry(t Telemetry) {
 		s.status = *t.Status
 	}
 }
+
+// AddDistanceDelta adds delta distance accumulated from wheel revolutions.
+func (s *State) AddDistanceDelta(deltaMiles float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.isRunning && deltaMiles > 0 {
+		s.distanceMiles += deltaMiles
+	}
+}
