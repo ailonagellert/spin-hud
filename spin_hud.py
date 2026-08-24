@@ -2492,6 +2492,9 @@ async def handle_http_request(reader: asyncio.StreamReader, writer: asyncio.Stre
             resp = (
                 b"HTTP/1.1 200 OK\r\n"
                 b"Content-Type: text/html; charset=utf-8\r\n"
+                b"Cache-Control: no-cache, no-store, must-revalidate\r\n"
+                b"Pragma: no-cache\r\n"
+                b"Expires: 0\r\n"
                 b"Content-Length: " + str(len(content)).encode() + b"\r\n"
                 b"Connection: close\r\n\r\n" + content
             )
