@@ -538,6 +538,19 @@ class WorkoutState:
 
 
 # Embedded HTML/CSS/JS Studio Web App
+def _load_index_html() -> str:
+    """Load UI template from web/index.html next to script if present, else fallback to embedded."""
+    candidate = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "index.html")
+    if os.path.exists(candidate):
+        try:
+            with open(candidate, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception:
+            pass
+    return INDEX_HTML
+
+
+# Embedded HTML/CSS/JS Studio Web App (Fallback)
 INDEX_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -840,8 +853,92 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
     .telemetry-card.cadence-card::before { background: linear-gradient(90deg, #00e5ff, transparent); }
     .telemetry-card.speed-card::before { background: linear-gradient(90deg, #38bdf8, transparent); }
+    .telemetry-card.power-card::before { background: linear-gradient(90deg, #f59e0b, #eab308, transparent); }
     .telemetry-card.hr-card::before { background: linear-gradient(90deg, var(--hr-accent, #ff6d00), transparent); }
     .telemetry-card.timer-card::before { background: linear-gradient(90deg, #a855f7, transparent); }
+
+    /* Layout Variations: Left & Right Sidebar Stacks */
+    .layout-left .telemetry-dock {
+      position: absolute;
+      left: 32px;
+      top: 180px;
+      bottom: 24px;
+      width: 380px;
+      max-width: 380px;
+      margin: 0;
+      flex-direction: column;
+      justify-content: flex-start;
+      gap: 10px;
+      z-index: 40;
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+    .layout-left .telemetry-dock::-webkit-scrollbar { display: none; }
+    .layout-left #interval-cue-bar {
+      top: 80px;
+      left: 32px;
+      width: 380px;
+      min-width: 380px;
+      max-width: 380px;
+      z-index: 45;
+    }
+
+    .layout-right .telemetry-dock {
+      position: absolute;
+      right: 32px;
+      top: 160px;
+      bottom: 24px;
+      width: 380px;
+      max-width: 380px;
+      margin: 0;
+      flex-direction: column;
+      justify-content: flex-start;
+      gap: 10px;
+      z-index: 40;
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+    .layout-right .telemetry-dock::-webkit-scrollbar { display: none; }
+    .layout-right .yt-container {
+      top: 80px;
+      right: 32px;
+      width: 380px;
+      max-width: 380px;
+      z-index: 45;
+    }
+
+    .layout-left .telemetry-card,
+    .layout-right .telemetry-card {
+      flex: 0 0 auto;
+      padding: 14px 18px;
+      border-radius: 18px;
+      min-height: 118px;
+      gap: 4px;
+    }
+
+    .layout-left .card-value,
+    .layout-right .card-value {
+      font-size: 44px;
+      line-height: 1;
+      font-weight: 800;
+    }
+
+    .layout-left .card-main,
+    .layout-right .card-main {
+      margin: 4px 0;
+      gap: 8px;
+    }
+
+    .layout-left .card-unit,
+    .layout-right .card-unit {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .layout-left .card-footer,
+    .layout-right .card-footer {
+      font-size: 12px;
+    }
 
     .card-label {
       font-size: 12px;
@@ -1103,8 +1200,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
       display: flex;
       flex-direction: column;
       gap: 6px;
-      min-width: 320px;
-      max-width: 440px;
+      min-width: 350px;
+      max-width: 480px;
       box-shadow: 0 12px 40px rgba(0,0,0,0.5);
       z-index: 50;
       transition: all 0.3s ease;
@@ -1116,6 +1213,50 @@ INDEX_HTML = r"""<!DOCTYPE html>
       align-items: center;
       font-size: 13px;
       font-weight: 800;
+      gap: 10px;
+    }
+
+    .program-select-dropdown {
+      background: #0f172a;
+      border: 1px solid var(--glass-border);
+      color: var(--accent-cyan);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 4px 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.2s;
+      min-height: 28px;
+    }
+
+    .program-select-dropdown:hover {
+      background: #1e293b;
+      border-color: var(--accent-cyan);
+    }
+
+    .program-select-dropdown:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+    }
+
+    .program-select-dropdown option {
+      background-color: #0f172a !important;
+      color: #f8fafc !important;
+      font-weight: 700;
+      padding: 8px 10px;
+    }
+
+    .cue-interval-badge {
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--glass-border);
+      padding: 2px 8px;
+      border-radius: 6px;
+      white-space: nowrap;
     }
 
     .interval-target-pill {
@@ -1313,6 +1454,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <div class="sensor-tag"><span id="dot-spd" class="sensor-dot"></span> SPD</div>
         </div>
         <div class="clock-pill" id="top-clock">--:--</div>
+        <button id="btn-layout" class="btn-icon" title="Switch HUD Layout (L): Bottom / Left / Right">⬇️</button>
         <button id="btn-summary" class="btn-icon" title="Workout Summary (S)">📊</button>
         <button id="btn-settings" class="btn-icon" title="Settings">⚙️</button>
         <button id="btn-fs" class="btn-icon" title="Fullscreen (F)">⛶</button>
@@ -1322,7 +1464,15 @@ INDEX_HTML = r"""<!DOCTYPE html>
     <!-- Interval Workout Cue Bar -->
     <div id="interval-cue-bar" class="interval-cue-bar interactive">
       <div class="interval-cue-header">
-        <span id="cue-title" style="color:var(--accent-cyan); font-weight:800;">Open Ride</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <select id="quick-select-program" class="program-select-dropdown" title="Select Workout Interval Program">
+            <option value="open">🚴 Open Spin</option>
+            <option value="hiit20">⚡ 20m HIIT</option>
+            <option value="climb30">⛰️ 30m Climbs</option>
+            <option value="tabata">🔥 15m Tabata</option>
+          </select>
+          <span id="cue-title" class="cue-interval-badge">Free Ride</span>
+        </div>
         <span id="cue-target" class="interval-target-pill">Target: Free Spin</span>
       </div>
       <div class="interval-progress-bg">
@@ -1384,20 +1534,35 @@ INDEX_HTML = r"""<!DOCTYPE html>
         </div>
       </div>
 
-      <!-- Speed & Power Pod -->
-      <div class="telemetry-card speed-card">
+      <!-- Speed Pod -->
+      <div id="speed-card" class="telemetry-card speed-card">
         <div class="card-label">
-          <span>Speed & Power</span>
+          <span>Speed</span>
           <span id="unit-toggle" class="unit-pill">MPH</span>
         </div>
         <div class="card-main">
           <span id="val-speed" class="card-value">—</span>
           <span id="label-speed-unit" class="card-unit">MPH</span>
-          <span id="val-power-badge" class="power-badge" style="margin-left:auto;">⚡ <b id="val-watts">0</b> W</span>
         </div>
         <div class="card-footer">
-          <span>Avg <b id="val-avg-spd">—</b> · <b id="val-wkg">0.0</b> W/kg</span>
+          <span>Avg <b id="val-avg-spd">—</b></span>
           <span id="val-distance" style="font-family:'JetBrains Mono'; font-weight:700; color:#fff">0.00 mi</span>
+        </div>
+      </div>
+
+      <!-- Power Meter Pod -->
+      <div id="power-card" class="telemetry-card power-card">
+        <div class="card-label">
+          <span>Power</span>
+          <span style="color:#f59e0b; font-size:16px;">⚡</span>
+        </div>
+        <div class="card-main">
+          <span id="val-watts" class="card-value">0</span>
+          <span class="card-unit">WATTS</span>
+        </div>
+        <div class="card-footer">
+          <span>Avg <b id="val-avg-watts">—</b> · Max <b id="val-max-watts">—</b></span>
+          <span style="color:var(--accent-cyan); font-family:'JetBrains Mono'; font-weight:700;"><b id="val-wkg">0.0</b> W/kg</span>
         </div>
       </div>
 
@@ -1453,6 +1618,14 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <option value="hiit20">20-Min HIIT Blast (Sprints & Recovery)</option>
           <option value="climb30">30-Min Hill Climbs & Cadence Surges</option>
           <option value="tabata">15-Min Tabata Fury (20s On / 10s Off)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">HUD Cards Screen Layout</label>
+        <select id="select-layout" class="form-input">
+          <option value="bottom">⬇️ Bottom Bar (Horizontal Row)</option>
+          <option value="left">⬅️ Left Stack (Vertical Sidebar)</option>
+          <option value="right">➡️ Right Stack (Vertical Sidebar)</option>
         </select>
       </div>
       <div class="form-group">
@@ -1530,6 +1703,23 @@ INDEX_HTML = r"""<!DOCTYPE html>
     let playlistId = "__PLAYLIST_ID__";
     let isImperial = true;
     let crankAngle = 0;
+    const videoTitleCache = {};
+
+    function fetchVideoTitle(vidId, callback) {
+      if (videoTitleCache[vidId]) {
+        callback(videoTitleCache[vidId]);
+        return;
+      }
+      fetch('/api/youtube/title?id=' + encodeURIComponent(vidId))
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.title) {
+            videoTitleCache[vidId] = data.title;
+            callback(data.title);
+          }
+        })
+        .catch(() => {});
+    }
 
     const WORKOUT_PROGRAMS = {
       open: {
@@ -1613,13 +1803,22 @@ INDEX_HTML = r"""<!DOCTYPE html>
       setTimeout(renderPlaylist, 1000);
     }
 
+    function setWorkoutRunning(shouldRun) {
+      if (!latestSnapshot) return;
+      if (latestSnapshot.is_running !== shouldRun) {
+        fetch('/api/workout/toggle', { method: 'POST' });
+      }
+    }
+
     function onPlayerStateChange(event) {
       updateVideoTitle();
       const playBtn = document.getElementById('btn-play');
       if (event.data === YT.PlayerState.PLAYING) {
         playBtn.textContent = '⏸';
-      } else {
+        setWorkoutRunning(true);
+      } else if (event.data === YT.PlayerState.PAUSED) {
         playBtn.textContent = '▶';
+        setWorkoutRunning(false);
       }
       renderPlaylist();
     }
@@ -1673,9 +1872,19 @@ INDEX_HTML = r"""<!DOCTYPE html>
         title.style.overflow = 'hidden';
         title.style.textOverflow = 'ellipsis';
         title.style.whiteSpace = 'nowrap';
-        title.textContent = (idx === currentIndex && player.getVideoData && player.getVideoData().title) 
-          ? player.getVideoData().title 
-          : `Track ${idx + 1} (${vidId})`;
+        
+        if (idx === currentIndex && player.getVideoData && player.getVideoData().title) {
+          const t = player.getVideoData().title;
+          videoTitleCache[vidId] = t;
+          title.textContent = t;
+        } else if (videoTitleCache[vidId]) {
+          title.textContent = videoTitleCache[vidId];
+        } else {
+          title.textContent = `Track ${idx + 1} (${vidId})`;
+          fetchVideoTitle(vidId, (realTitle) => {
+            title.textContent = realTitle;
+          });
+        }
 
         item.appendChild(num);
         item.appendChild(title);
@@ -1702,7 +1911,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
       const prog = WORKOUT_PROGRAMS[currentProgram] || WORKOUT_PROGRAMS.open;
       if (!prog || !prog.intervals || prog.intervals.length === 0) {
-        cueTitle.textContent = "Open Ride";
+        cueTitle.textContent = "Free Ride";
         cueTitle.style.color = "var(--accent-cyan)";
         cueTarget.textContent = "Target: Free Spin";
         cueTarget.style.borderColor = "var(--glass-border)";
@@ -1814,8 +2023,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
         document.getElementById('val-avg-spd').textContent = d.avg_speed_kmh !== null && d.avg_speed_kmh !== undefined ? d.avg_speed_kmh.toFixed(1) : '—';
       }
 
-      document.getElementById('val-watts').textContent = d.watts || 0;
+      // Power Meter
+      document.getElementById('val-watts').textContent = (d.watts !== null && d.watts !== undefined) ? d.watts : 0;
       document.getElementById('val-wkg').textContent = (d.w_kg || 0).toFixed(1);
+      document.getElementById('val-avg-watts').textContent = (d.avg_watts !== null && d.avg_watts !== undefined) ? d.avg_watts : '—';
+      document.getElementById('val-max-watts').textContent = (d.max_watts !== null && d.max_watts !== undefined) ? d.max_watts : '—';
 
       // Heart Rate & Zone
       const hrEl = document.getElementById('val-hr');
@@ -1926,11 +2138,54 @@ INDEX_HTML = r"""<!DOCTYPE html>
         toggleFullscreen();
       } else if (e.code === 'KeyH') {
         toggleHUD();
+      } else if (e.code === 'KeyL') {
+        cycleLayout();
       } else if (e.code === 'KeyS') {
         const sm = document.getElementById('summary-modal');
         if (sm.classList.contains('open')) closeSummary(); else showSummary();
       }
     });
+
+    let currentLayout = localStorage.getItem('spin_hud_layout') || 'bottom';
+
+    function setLayout(layout) {
+      currentLayout = layout || 'bottom';
+      try { localStorage.setItem('spin_hud_layout', currentLayout); } catch (e) {}
+      const hud = document.getElementById('hud-overlay');
+      if (hud) {
+        hud.classList.remove('layout-left', 'layout-right', 'layout-bottom');
+        if (currentLayout === 'left') {
+          hud.classList.add('layout-left');
+        } else if (currentLayout === 'right') {
+          hud.classList.add('layout-right');
+        } else {
+          hud.classList.add('layout-bottom');
+        }
+      }
+
+      const btn = document.getElementById('btn-layout');
+      if (btn) {
+        if (currentLayout === 'left') {
+          btn.textContent = '⬅️';
+          btn.title = 'HUD Layout: Left Stack (Click or press L to switch)';
+        } else if (currentLayout === 'right') {
+          btn.textContent = '➡️';
+          btn.title = 'HUD Layout: Right Stack (Click or press L to switch)';
+        } else {
+          btn.textContent = '⬇️';
+          btn.title = 'HUD Layout: Bottom Bar (Click or press L to switch)';
+        }
+      }
+
+      const select = document.getElementById('select-layout');
+      if (select) select.value = currentLayout;
+    }
+
+    function cycleLayout() {
+      if (currentLayout === 'bottom') setLayout('left');
+      else if (currentLayout === 'left') setLayout('right');
+      else setLayout('bottom');
+    }
 
     function togglePlay() {
       if (!player) return;
@@ -1984,7 +2239,14 @@ INDEX_HTML = r"""<!DOCTYPE html>
     };
 
     document.getElementById('btn-timer-toggle').onclick = () => {
-      fetch('/api/workout/toggle', { method: 'POST' });
+      fetch('/api/workout/toggle', { method: 'POST' }).then(() => {
+        if (!player || !latestSnapshot) return;
+        if (latestSnapshot.is_running) {
+          if (player.pauseVideo) player.pauseVideo();
+        } else {
+          if (player.playVideo) player.playVideo();
+        }
+      });
     };
 
     document.getElementById('btn-reset-timer').onclick = () => {
@@ -1998,9 +2260,23 @@ INDEX_HTML = r"""<!DOCTYPE html>
       document.getElementById('label-speed-unit').textContent = unit;
     };
 
+    // Quick Workout Program Selector
+    document.getElementById('quick-select-program').onchange = (e) => {
+      currentProgram = e.target.value;
+      const modalSelect = document.getElementById('select-program');
+      if (modalSelect) modalSelect.value = currentProgram;
+      const elapsed = latestSnapshot ? (latestSnapshot.elapsed_sec || 0) : 0;
+      const cad = latestSnapshot ? latestSnapshot.cadence : null;
+      updateIntervalEngine(elapsed, cad);
+    };
+
     // Settings Modal
     const modal = document.getElementById('settings-modal');
-    document.getElementById('btn-settings').onclick = () => modal.classList.add('open');
+    document.getElementById('btn-settings').onclick = () => {
+      const modalSelect = document.getElementById('select-program');
+      if (modalSelect) modalSelect.value = currentProgram;
+      modal.classList.add('open');
+    };
     document.getElementById('btn-close-modal').onclick = () => modal.classList.remove('open');
     
     document.getElementById('btn-save-settings').onclick = () => {
@@ -2009,6 +2285,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
       const maxhr = parseInt(document.getElementById('input-maxhr').value);
       const weight = parseFloat(document.getElementById('input-weight').value);
       currentProgram = document.getElementById('select-program').value;
+      const quickSelect = document.getElementById('quick-select-program');
+      if (quickSelect) quickSelect.value = currentProgram;
+      const elapsed = latestSnapshot ? (latestSnapshot.elapsed_sec || 0) : 0;
+      const cad = latestSnapshot ? latestSnapshot.cadence : null;
+      updateIntervalEngine(elapsed, cad);
       
       fetch('/api/settings', {
         method: 'POST',
@@ -2025,6 +2306,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
       });
     };
 
+    document.getElementById('btn-layout').onclick = cycleLayout;
+    document.getElementById('select-layout').onchange = (e) => setLayout(e.target.value);
+
     // Live Clocks
     function updateClock() {
       const d = new Date();
@@ -2040,11 +2324,35 @@ INDEX_HTML = r"""<!DOCTYPE html>
     updateClock();
     setInterval(updateClock, 1000);
 
+    setLayout(currentLayout);
     initTelemetry();
   </script>
 </body>
-</html>
-"""
+</html>"""
+
+
+
+YOUTUBE_TITLE_CACHE: dict[str, str] = {}
+
+
+def get_youtube_title_sync(video_id: str) -> str:
+    """Fetch video title from YouTube oEmbed with in-memory caching."""
+    if video_id in YOUTUBE_TITLE_CACHE:
+        return YOUTUBE_TITLE_CACHE[video_id]
+    import urllib.request
+    url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        with urllib.request.urlopen(req, timeout=4) as response:
+            if response.status == 200:
+                data = json.loads(response.read().decode("utf-8"))
+                title = data.get("title", "")
+                if title:
+                    YOUTUBE_TITLE_CACHE[video_id] = title
+                    return title
+    except Exception:
+        pass
+    return ""
 
 
 async def handle_http_request(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, state: WorkoutState) -> None:
@@ -2078,7 +2386,7 @@ async def handle_http_request(reader: asyncio.StreamReader, writer: asyncio.Stre
 
         # Route endpoints
         if path == "/" or path.startswith("/index.html"):
-            rendered = INDEX_HTML.replace("__PLAYLIST_ID__", state.playlist_id)
+            rendered = _load_index_html().replace("__PLAYLIST_ID__", state.playlist_id)
             content = rendered.encode("utf-8")
             resp = (
                 b"HTTP/1.1 200 OK\r\n"
@@ -2087,6 +2395,20 @@ async def handle_http_request(reader: asyncio.StreamReader, writer: asyncio.Stre
                 b"Connection: close\r\n\r\n" + content
             )
             writer.write(resp)
+            await writer.drain()
+            writer.close()
+
+        elif path.startswith("/api/youtube/title") and method == "GET":
+            import urllib.parse
+            parsed_url = urllib.parse.urlparse(path)
+            query = urllib.parse.parse_qs(parsed_url.query)
+            video_id = query.get("id", [""])[0].strip()
+            if not video_id:
+                writer.write(b"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"error\":\"missing video id\"}")
+            else:
+                title = await asyncio.to_thread(get_youtube_title_sync, video_id)
+                resp_json = json.dumps({"title": title}).encode("utf-8")
+                writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n" + resp_json)
             await writer.drain()
             writer.close()
 
