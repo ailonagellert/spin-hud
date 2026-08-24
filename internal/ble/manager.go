@@ -12,6 +12,8 @@ import (
 type SensorManager interface {
 	// ConnectLoop scans, connects, subscribes, and auto-reconnects until stopped.
 	ConnectLoop(state *session.State)
+	// Scan scans for nearby BLE sensors for the given duration.
+	Scan(d time.Duration)
 }
 
 // ConnectLoop runs the default sensor manager.

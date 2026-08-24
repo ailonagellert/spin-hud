@@ -110,7 +110,7 @@ func TestToggleAndCalories(t *testing.T) {
 	if st.ToggleWorkoutTimer() {
 		t.Fatal("toggle should pause")
 	}
-	if st.ToggleWorkoutTimer() {
+	if !st.ToggleWorkoutTimer() {
 		t.Fatal("second toggle should resume")
 	}
 	st.ResetWorkout()

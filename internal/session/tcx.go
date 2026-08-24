@@ -48,7 +48,6 @@ func GenerateTCX(s *State) string {
 	if snap.AvgCadence != nil {
 		avgCad = *snap.AvgCadence
 	}
-	maxWatts := s.maxWatts
 	avgWatts := 0
 	if snap.AvgWatts != nil {
 		avgWatts = *snap.AvgWatts
