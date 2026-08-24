@@ -183,14 +183,126 @@ def save_device_cache(cache: dict[str, str]) -> None:
         pass
 
 
+DEFAULT_RIDER_WEIGHT_KG = 75.0
+
+
+def generate_tcx(state: WorkoutState) -> str:
+    """Generate a standard Training Center XML (TCX) activity file for Strava and Garmin Connect."""
+    snap = state.get_snapshot()
+    with state.lock:
+        start_time_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(state.workout_start_wall))
+        total_time = int(snap["elapsed_sec"])
+        total_dist_m = round(state.distance_miles * 1609.344, 1)
+        calories = int(round(state.calories))
+        avg_hr = snap["avg_hr"] or 0
+        max_hr = state.max_hr_val or 0
+        max_speed_mps = round((state.max_speed_mph * 0.44704), 2) if state.max_speed_mph > 0 else 0.0
+        avg_cad = snap["avg_cadence"] or 0
+        max_watts = state.max_watts or 0
+        avg_watts = snap["avg_watts"] or 0
+        points = list(state.trackpoints)
+
+    xml_lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<TrainingCenterDatabase',
+        '  xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"',
+        '  xmlns:ns2="http://www.garmin.com/xmlschemas/ActivityExtension/v2"',
+        '  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+        '  xsi:schemaLocation="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2 http://www.garmin.com/xmlschemas/TrainingCenterDatabasev2.xsd">',
+        '  <Activities>',
+        '    <Activity Sport="Biking">',
+        f'      <Id>{start_time_iso}</Id>',
+        f'      <Lap StartTime="{start_time_iso}">',
+        f'        <TotalTimeSeconds>{total_time}</TotalTimeSeconds>',
+        f'        <DistanceMeters>{total_dist_m}</DistanceMeters>',
+        f'        <MaximumSpeed>{max_speed_mps}</MaximumSpeed>',
+        f'        <Calories>{calories}</Calories>',
+    ]
+
+    if avg_hr > 0:
+        xml_lines.extend([
+            '        <AverageHeartRateBpm>',
+            f'          <Value>{avg_hr}</Value>',
+            '        </AverageHeartRateBpm>',
+        ])
+    if max_hr > 0:
+        xml_lines.extend([
+            '        <MaximumHeartRateBpm>',
+            f'          <Value>{max_hr}</Value>',
+            '        </MaximumHeartRateBpm>',
+        ])
+
+    xml_lines.extend([
+        '        <Intensity>Active</Intensity>',
+        f'        <Cadence>{avg_cad}</Cadence>',
+        '        <TriggerMethod>Manual</TriggerMethod>',
+        '        <Track>',
+    ])
+
+    if not points:
+        points = [{
+            "time": state.workout_start_wall,
+            "hr": avg_hr or 120,
+            "cadence": avg_cad or 80,
+            "dist_m": total_dist_m,
+            "speed_mps": 0.0,
+            "watts": avg_watts or 0,
+        }]
+
+    for pt in points:
+        pt_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(pt.get("time", time.time())))
+        xml_lines.append('          <Trackpoint>')
+        xml_lines.append(f'            <Time>{pt_iso}</Time>')
+        xml_lines.append(f'            <DistanceMeters>{pt.get("dist_m", 0.0)}</DistanceMeters>')
+        if pt.get("hr"):
+            xml_lines.append('            <HeartRateBpm>')
+            xml_lines.append(f'              <Value>{int(pt["hr"])}</Value>')
+            xml_lines.append('            </HeartRateBpm>')
+        if pt.get("cadence"):
+            xml_lines.append(f'            <Cadence>{int(pt["cadence"])}</Cadence>')
+        xml_lines.append('            <Extensions>')
+        xml_lines.append('              <ns2:TPX>')
+        xml_lines.append(f'                <ns2:Speed>{pt.get("speed_mps", 0.0)}</ns2:Speed>')
+        xml_lines.append(f'                <ns2:Watts>{pt.get("watts", 0)}</ns2:Watts>')
+        xml_lines.append('              </ns2:TPX>')
+        xml_lines.append('            </Extensions>')
+        xml_lines.append('          </Trackpoint>')
+
+    xml_lines.extend([
+        '        </Track>',
+        '      </Lap>',
+        '      <Creator xsi:type="Device_t">',
+        '        <Name>Spin Studio HUD</Name>',
+        '        <UnitId>5881436</UnitId>',
+        '        <ProductID>1</ProductID>',
+        '        <Version>',
+        '          <VersionMajor>1</VersionMajor>',
+        '          <VersionMinor>0</VersionMinor>',
+        '        </Version>',
+        '      </Creator>',
+        '    </Activity>',
+        '  </Activities>',
+        '</TrainingCenterDatabase>',
+    ])
+
+    return "\n".join(xml_lines)
+
+
 class WorkoutState:
     """Thread-safe telemetry state container with session statistics."""
 
-    def __init__(self, playlist_id: str = DEFAULT_PLAYLIST_ID, wheel_circ_m: float = DEFAULT_WHEEL_CIRC_M, max_hr: int = DEFAULT_MAX_HR):
-        self.lock = threading.Lock()
+    def __init__(
+        self,
+        playlist_id: str = DEFAULT_PLAYLIST_ID,
+        wheel_circ_m: float = DEFAULT_WHEEL_CIRC_M,
+        max_hr: int = DEFAULT_MAX_HR,
+        rider_weight_kg: float = DEFAULT_RIDER_WEIGHT_KG,
+    ):
+        self.lock = threading.RLock()
         self.playlist_id = playlist_id
         self.wheel_circ_m = wheel_circ_m if (wheel_circ_m and math.isfinite(wheel_circ_m) and wheel_circ_m > 0) else DEFAULT_WHEEL_CIRC_M
         self.max_hr = max_hr if (max_hr and max_hr > 0) else DEFAULT_MAX_HR
+        self.rider_weight_kg = rider_weight_kg if (rider_weight_kg and rider_weight_kg > 0) else DEFAULT_RIDER_WEIGHT_KG
 
         # Instantaneous live metrics
         self.hr: int | None = None
@@ -211,13 +323,21 @@ class WorkoutState:
         self.spd_count: int = 0
         self.max_speed_mph: float = 0.0
 
+        self.watts_sum: float = 0.0
+        self.watts_count: int = 0
+        self.max_watts: int = 0
+
         self.calories: float = 0.0
         self.last_cal_time: float = time.monotonic()
 
         self.started_at = time.monotonic()
+        self.workout_start_wall = time.time()
         self.is_running = True
         self.paused_duration = 0.0
         self.last_pause_time = 0.0
+
+        self.trackpoints: list[dict[str, Any]] = []
+        self.last_trackpoint_time = 0.0
 
         self.sensors = {
             "hr": {"connected": False, "name": "Searching…"},
@@ -230,6 +350,7 @@ class WorkoutState:
         with self.lock:
             now = time.monotonic()
             self.started_at = now
+            self.workout_start_wall = time.time()
             self.distance_miles = 0.0
             self.paused_duration = 0.0
             self.last_pause_time = 0.0
@@ -247,8 +368,14 @@ class WorkoutState:
             self.spd_count = 0
             self.max_speed_mph = 0.0
 
+            self.watts_sum = 0.0
+            self.watts_count = 0
+            self.max_watts = 0
+
             self.calories = 0.0
             self.last_cal_time = now
+            self.trackpoints = []
+            self.last_trackpoint_time = 0.0
 
     def toggle_workout_timer(self) -> bool:
         with self.lock:
@@ -289,7 +416,7 @@ class WorkoutState:
                         self.max_hr_val = new_hr
 
                     dt = now - self.last_cal_time
-                    if 0 < dt < 10.0:  # Valid sampling interval
+                    if 0 < dt < 10.0:
                         if new_hr > 75:
                             self.calories += (new_hr - 55) * 0.0022 * dt
                     self.last_cal_time = now
@@ -304,22 +431,30 @@ class WorkoutState:
                     if new_cad > self.max_cadence:
                         self.max_cadence = new_cad
 
-            # Speed update
+            # Speed update & Virtual Power calculation
             if "speed_mph" in kwargs:
                 new_spd = kwargs["speed_mph"]
                 self.speed_mph = new_spd
-                if self.is_running and new_spd is not None and new_spd > 0:
+                if self.is_running and new_spd is not None and new_spd > 0.5:
                     self.spd_sum += new_spd
                     self.spd_count += 1
                     if new_spd > self.max_speed_mph:
                         self.max_speed_mph = new_spd
+
+                    # Indoor cycling virtual power formula
+                    v_mps = new_spd * 0.44704
+                    w = int(round(3.5 * v_mps + 0.35 * (v_mps ** 3)))
+                    self.watts_sum += w
+                    self.watts_count += 1
+                    if w > self.max_watts:
+                        self.max_watts = w
 
             # Distance override (if specified directly)
             if "distance_miles" in kwargs:
                 if self.is_running:
                     self.distance_miles = kwargs["distance_miles"]
 
-            # Other attributes (status, playlist_id, etc.)
+            # Other attributes
             for k in ("status", "playlist_id"):
                 if k in kwargs:
                     setattr(self, k, kwargs[k])
@@ -338,6 +473,29 @@ class WorkoutState:
             speed_val = self.speed_mph
             speed_kmh = (speed_val * 1.60934) if speed_val is not None else None
             dist_km = self.distance_miles * 1.60934
+
+            # Virtual Power Calculation
+            if speed_val and speed_val > 0.5:
+                v_mps = speed_val * 0.44704
+                current_watts = int(round(3.5 * v_mps + 0.35 * (v_mps ** 3)))
+            else:
+                current_watts = 0
+
+            avg_watts = int(round(self.watts_sum / self.watts_count)) if self.watts_count > 0 else None
+            w_kg = round(current_watts / self.rider_weight_kg, 1) if (self.rider_weight_kg > 0 and current_watts > 0) else 0.0
+            avg_w_kg = round(avg_watts / self.rider_weight_kg, 1) if (self.rider_weight_kg > 0 and avg_watts) else None
+
+            # Periodic Trackpoint Recording for TCX export
+            if self.is_running and (now - self.last_trackpoint_time >= 2.0):
+                self.last_trackpoint_time = now
+                self.trackpoints.append({
+                    "time": time.time(),
+                    "hr": self.hr,
+                    "cadence": int(round(self.cadence)) if self.cadence is not None else 0,
+                    "speed_mps": round((speed_val * 0.44704) if speed_val else 0.0, 2),
+                    "dist_m": round(self.distance_miles * 1609.344, 1),
+                    "watts": current_watts,
+                })
 
             avg_hr = int(round(self.hr_sum / self.hr_count)) if self.hr_count > 0 else None
             avg_cad = int(round(self.cad_sum / self.cad_count)) if self.cad_count > 0 else None
@@ -362,6 +520,11 @@ class WorkoutState:
                 "speed_kmh": round(speed_kmh, 1) if speed_kmh is not None else None,
                 "avg_speed_kmh": avg_spd_kmh,
                 "max_speed_kmh": max_spd_kmh,
+                "watts": current_watts,
+                "avg_watts": avg_watts,
+                "max_watts": self.max_watts if self.max_watts > 0 else None,
+                "w_kg": w_kg,
+                "avg_w_kg": avg_w_kg,
                 "distance_mi": round(self.distance_miles, 2),
                 "distance_km": round(dist_km, 2),
                 "calories": int(round(self.calories)),
@@ -370,6 +533,7 @@ class WorkoutState:
                 "sensors": self.sensors,
                 "status": self.status,
                 "playlist_id": self.playlist_id,
+                "rider_weight_kg": self.rider_weight_kg,
             }
 
 
@@ -912,6 +1076,73 @@ INDEX_HTML = r"""<!DOCTYPE html>
       color: var(--accent-cyan);
     }
 
+    .power-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 800;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 8px;
+      padding: 3px 8px;
+    }
+
+    .interval-cue-bar {
+      position: absolute;
+      top: 90px;
+      left: 32px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 12px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 320px;
+      max-width: 440px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+      z-index: 50;
+      transition: all 0.3s ease;
+    }
+
+    .interval-cue-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .interval-target-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid var(--glass-border);
+    }
+
+    .interval-progress-bg {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .interval-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #00e5ff, #0088ff);
+      width: 0%;
+      transition: width 0.3s ease, background 0.3s;
+    }
+
     .modal-backdrop {
       display: none;
       position: fixed;
@@ -1067,6 +1298,21 @@ INDEX_HTML = r"""<!DOCTYPE html>
       </div>
     </div>
 
+    <!-- Interval Workout Cue Bar -->
+    <div id="interval-cue-bar" class="interval-cue-bar interactive">
+      <div class="interval-cue-header">
+        <span id="cue-title" style="color:var(--accent-cyan); font-weight:800;">Open Ride</span>
+        <span id="cue-target" class="interval-target-pill">Target: Free Spin</span>
+      </div>
+      <div class="interval-progress-bg">
+        <div id="cue-progress-fill" class="interval-progress-fill"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted); font-weight:600;">
+        <span id="cue-desc">Freestyle Intensity</span>
+        <span id="cue-time" style="font-family:'JetBrains Mono'">--:--</span>
+      </div>
+    </div>
+
     <!-- YouTube Quick Controls & Playlist Drawer -->
     <div class="yt-container interactive">
       <div class="yt-quick-bar">
@@ -1099,7 +1345,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
     <div class="telemetry-dock interactive">
       
       <!-- Cadence Pod -->
-      <div class="telemetry-card cadence-card">
+      <div id="cadence-card" class="telemetry-card cadence-card">
         <div class="card-label">
           <span>Cadence</span>
           <svg class="crank-icon" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" stroke-width="2">
@@ -1117,18 +1363,19 @@ INDEX_HTML = r"""<!DOCTYPE html>
         </div>
       </div>
 
-      <!-- Speed & Distance Pod -->
+      <!-- Speed & Power Pod -->
       <div class="telemetry-card speed-card">
         <div class="card-label">
-          <span>Speed</span>
+          <span>Speed & Power</span>
           <span id="unit-toggle" class="unit-pill">MPH</span>
         </div>
         <div class="card-main">
           <span id="val-speed" class="card-value">—</span>
           <span id="label-speed-unit" class="card-unit">MPH</span>
+          <span id="val-power-badge" class="power-badge" style="margin-left:auto;">⚡ <b id="val-watts">0</b> W</span>
         </div>
         <div class="card-footer">
-          <span>Avg <b id="val-avg-spd">—</b> · Max <b id="val-max-spd">—</b></span>
+          <span>Avg <b id="val-avg-spd">—</b> · <b id="val-wkg">0.0</b> W/kg</span>
           <span id="val-distance" style="font-family:'JetBrains Mono'; font-weight:700; color:#fff">0.00 mi</span>
         </div>
       </div>
@@ -1179,8 +1426,21 @@ INDEX_HTML = r"""<!DOCTYPE html>
         <button id="btn-close-modal" class="btn-icon">✕</button>
       </div>
       <div class="form-group">
+        <label class="form-label">Workout Interval Program</label>
+        <select id="select-program" class="form-input">
+          <option value="open">Open Spin Session (Free Ride)</option>
+          <option value="hiit20">20-Min HIIT Blast (Sprints & Recovery)</option>
+          <option value="climb30">30-Min Hill Climbs & Cadence Surges</option>
+          <option value="tabata">15-Min Tabata Fury (20s On / 10s Off)</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label class="form-label">YouTube Playlist ID or URL</label>
         <input type="text" id="input-playlist" class="form-input" value="__PLAYLIST_ID__">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Rider Weight (kg)</label>
+        <input type="number" id="input-weight" class="form-input" value="75">
       </div>
       <div class="form-group">
         <label class="form-label">Wheel Circumference (mm)</label>
@@ -1226,8 +1486,19 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <div class="summary-label">Speed (Avg / Max)</div>
           <div id="sum-spd" class="summary-val">— / — MPH</div>
         </div>
+        <div class="summary-stat-box">
+          <div class="summary-label">Estimated Power (Avg / Max)</div>
+          <div id="sum-power" class="summary-val" style="color:var(--accent-cyan)">— / — W</div>
+        </div>
+        <div class="summary-stat-box">
+          <div class="summary-label">Power-to-Weight (Avg)</div>
+          <div id="sum-wkg" class="summary-val" style="color:var(--accent-cyan)">— W/kg</div>
+        </div>
       </div>
-      <button id="btn-done-summary" class="btn-primary">Awesome Ride!</button>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
+        <button id="btn-export-tcx" class="btn-primary" style="background: linear-gradient(135deg, #fc4c02, #e34402); color:#fff;">💾 Download Strava / Garmin (.TCX)</button>
+        <button id="btn-done-summary" class="btn-primary">Awesome Ride!</button>
+      </div>
     </div>
   </div>
 
@@ -1238,6 +1509,63 @@ INDEX_HTML = r"""<!DOCTYPE html>
     let playlistId = "__PLAYLIST_ID__";
     let isImperial = true;
     let crankAngle = 0;
+
+    const WORKOUT_PROGRAMS = {
+      open: {
+        name: "Open Spin Session",
+        intervals: []
+      },
+      hiit20: {
+        name: "20-Min HIIT Blast",
+        intervals: [
+          { name: "Warmup Spin", duration: 180, minRpm: 80, maxRpm: 90, color: "#38bdf8", desc: "Easy aerobic warmup" },
+          { name: "High Surge 1/4", duration: 45, minRpm: 105, maxRpm: 120, color: "#ef4444", desc: "Out of saddle sprint!" },
+          { name: "Recovery Spin", duration: 75, minRpm: 75, maxRpm: 85, color: "#22c55e", desc: "Catch your breath" },
+          { name: "High Surge 2/4", duration: 45, minRpm: 105, maxRpm: 120, color: "#ef4444", desc: "Fast leg turnover!" },
+          { name: "Recovery Spin", duration: 75, minRpm: 75, maxRpm: 85, color: "#22c55e", desc: "Easy spinning" },
+          { name: "High Surge 3/4", duration: 45, minRpm: 105, maxRpm: 120, color: "#ef4444", desc: "Push hard!" },
+          { name: "Recovery Spin", duration: 75, minRpm: 75, maxRpm: 85, color: "#22c55e", desc: "Breathe deeply" },
+          { name: "Final Max Sprint", duration: 60, minRpm: 110, maxRpm: 130, color: "#ff0055", desc: "Empty the tank!" },
+          { name: "Cooldown Spin", duration: 240, minRpm: 65, maxRpm: 75, color: "#38bdf8", desc: "Flush lactic acid" }
+        ]
+      },
+      climb30: {
+        name: "30-Min Climbs & Surges",
+        intervals: [
+          { name: "Warmup Spin", duration: 240, minRpm: 85, maxRpm: 95, color: "#38bdf8", desc: "Gradual warmup" },
+          { name: "Heavy Climb 1", duration: 240, minRpm: 60, maxRpm: 70, color: "#f97316", desc: "Add heavy resistance" },
+          { name: "Flat Recovery", duration: 120, minRpm: 80, maxRpm: 90, color: "#22c55e", desc: "Release resistance" },
+          { name: "Fast Cadence Surge", duration: 60, minRpm: 105, maxRpm: 115, color: "#ef4444", desc: "High RPM surge" },
+          { name: "Heavy Climb 2", duration: 300, minRpm: 55, maxRpm: 65, color: "#f97316", desc: "Standing power climb" },
+          { name: "Flat Recovery", duration: 120, minRpm: 80, maxRpm: 90, color: "#22c55e", desc: "Smooth cadence" },
+          { name: "Final All-Out Sprint", duration: 60, minRpm: 115, maxRpm: 130, color: "#ff0055", desc: "Sprint finish!" },
+          { name: "Cool Down", duration: 300, minRpm: 65, maxRpm: 75, color: "#38bdf8", desc: "Gentle cool down" }
+        ]
+      },
+      tabata: {
+        name: "15-Min Tabata Fury",
+        intervals: [
+          { name: "Warmup Spin", duration: 180, minRpm: 85, maxRpm: 95, color: "#38bdf8", desc: "Prepare for high intensity" },
+          { name: "Tabata 1/8", duration: 20, minRpm: 115, maxRpm: 130, color: "#ef4444", desc: "MAX EFFORT 1" },
+          { name: "Rest", duration: 10, minRpm: 60, maxRpm: 75, color: "#64748b", desc: "Rest" },
+          { name: "Tabata 2/8", duration: 20, minRpm: 115, maxRpm: 130, color: "#ef4444", desc: "MAX EFFORT 2" },
+          { name: "Rest", duration: 10, minRpm: 60, maxRpm: 75, color: "#64748b", desc: "Rest" },
+          { name: "Tabata 3/8", duration: 20, minRpm: 115, maxRpm: 130, color: "#ef4444", desc: "MAX EFFORT 3" },
+          { name: "Rest", duration: 10, minRpm: 60, maxRpm: 75, color: "#64748b", desc: "Rest" },
+          { name: "Tabata 4/8", duration: 20, minRpm: 115, maxRpm: 130, color: "#ef4444", desc: "MAX EFFORT 4" },
+          { name: "Rest", duration: 10, minRpm: 60, maxRpm: 75, color: "#64748b", desc: "Rest" },
+          { name: "Tabata 5/8", duration: 20, minRpm: 115, maxRpm: 130, color: "#ef4444", desc: "MAX EFFORT 5" },
+          { name: "Rest", duration: 10, minRpm: 60, maxRpm: 75, color: "#64748b", desc: "Rest" },
+          { name: "Tabata 6/8", duration: 20, minRpm: 115, maxRpm: 130, color: "#ef4444", desc: "MAX EFFORT 6" },
+          { name: "Rest", duration: 10, minRpm: 60, maxRpm: 75, color: "#64748b", desc: "Rest" },
+          { name: "Tabata 7/8", duration: 20, minRpm: 115, maxRpm: 130, color: "#ef4444", desc: "MAX EFFORT 7" },
+          { name: "Rest", duration: 10, minRpm: 60, maxRpm: 75, color: "#64748b", desc: "Rest" },
+          { name: "Tabata 8/8 (Final)", duration: 20, minRpm: 120, maxRpm: 135, color: "#ff0055", desc: "LAST PUSH!" },
+          { name: "Cool Down", duration: 200, minRpm: 65, maxRpm: 75, color: "#38bdf8", desc: "Easy spin down" }
+        ]
+      }
+    };
+    let currentProgram = "open";
 
     function onYouTubeIframeAPIReady() {
       player = new YT.Player('player', {
@@ -1343,6 +1671,82 @@ INDEX_HTML = r"""<!DOCTYPE html>
       });
     }
 
+    function updateIntervalEngine(elapsedSec, currentCadence) {
+      const cueTitle = document.getElementById('cue-title');
+      const cueTarget = document.getElementById('cue-target');
+      const cueFill = document.getElementById('cue-progress-fill');
+      const cueDesc = document.getElementById('cue-desc');
+      const cueTime = document.getElementById('cue-time');
+      const cadValEl = document.getElementById('val-cadence');
+
+      const prog = WORKOUT_PROGRAMS[currentProgram] || WORKOUT_PROGRAMS.open;
+      if (!prog || !prog.intervals || prog.intervals.length === 0) {
+        cueTitle.textContent = "Open Ride";
+        cueTitle.style.color = "var(--accent-cyan)";
+        cueTarget.textContent = "Target: Free Spin";
+        cueTarget.style.borderColor = "var(--glass-border)";
+        cueTarget.style.color = "var(--text-muted)";
+        cueFill.style.width = "0%";
+        cueDesc.textContent = "Freestyle Intensity";
+        cueTime.textContent = "--:--";
+        if (cadValEl) cadValEl.style.color = "#fff";
+        return;
+      }
+
+      let tAcc = 0;
+      let activeInterval = null;
+      let intervalStart = 0;
+
+      for (let i = 0; i < prog.intervals.length; i++) {
+        const item = prog.intervals[i];
+        if (elapsedSec >= tAcc && elapsedSec < tAcc + item.duration) {
+          activeInterval = item;
+          intervalStart = tAcc;
+          break;
+        }
+        tAcc += item.duration;
+      }
+
+      if (!activeInterval) {
+        cueTitle.textContent = "Workout Complete 🏆";
+        cueTitle.style.color = "#22c55e";
+        cueTarget.textContent = "Great Ride!";
+        cueFill.style.width = "100%";
+        cueFill.style.background = "#22c55e";
+        cueDesc.textContent = "Cooling down";
+        cueTime.textContent = "0:00";
+        if (cadValEl) cadValEl.style.color = "#fff";
+        return;
+      }
+
+      const timeInInt = elapsedSec - intervalStart;
+      const rem = activeInterval.duration - timeInInt;
+      const pct = Math.min(100, Math.max(0, (timeInInt / activeInterval.duration) * 100));
+
+      cueTitle.textContent = activeInterval.name;
+      cueTitle.style.color = activeInterval.color;
+      cueTarget.textContent = `🎯 ${activeInterval.minRpm}–${activeInterval.maxRpm} RPM`;
+      cueTarget.style.borderColor = activeInterval.color;
+      cueTarget.style.color = activeInterval.color;
+      cueFill.style.width = `${pct}%`;
+      cueFill.style.background = activeInterval.color;
+      cueDesc.textContent = activeInterval.desc;
+      cueTime.textContent = `${Math.floor(rem / 60)}:${(rem % 60).toString().padStart(2, '0')}`;
+
+      // Cadence Target Guidance Color
+      if (cadValEl && currentCadence !== null && currentCadence > 0) {
+        if (currentCadence >= activeInterval.minRpm && currentCadence <= activeInterval.maxRpm) {
+          cadValEl.style.color = "#22c55e";  // In target: Green
+        } else if (currentCadence < activeInterval.minRpm) {
+          cadValEl.style.color = "#eab308";  // Below target: Yellow
+        } else {
+          cadValEl.style.color = "#ff0055";  // Above target: Hot Pink
+        }
+      } else if (cadValEl) {
+        cadValEl.style.color = "#fff";
+      }
+    }
+
     function initTelemetry() {
       const evtSource = new EventSource('/api/telemetry');
 
@@ -1376,20 +1780,21 @@ INDEX_HTML = r"""<!DOCTYPE html>
       document.getElementById('val-avg-cad').textContent = d.avg_cadence !== null && d.avg_cadence !== undefined ? d.avg_cadence : '—';
       document.getElementById('val-max-cad').textContent = d.max_cadence !== null && d.max_cadence !== undefined ? d.max_cadence : '—';
 
-      // Speed & Distance
+      // Speed & Virtual Power
       const spdEl = document.getElementById('val-speed');
       const distEl = document.getElementById('val-distance');
       if (isImperial) {
         spdEl.textContent = d.speed_mph !== null ? d.speed_mph.toFixed(1) : '—';
         distEl.textContent = d.distance_mi.toFixed(2) + ' mi';
         document.getElementById('val-avg-spd').textContent = d.avg_speed_mph !== null && d.avg_speed_mph !== undefined ? d.avg_speed_mph.toFixed(1) : '—';
-        document.getElementById('val-max-spd').textContent = d.max_speed_mph !== null && d.max_speed_mph !== undefined ? d.max_speed_mph.toFixed(1) : '—';
       } else {
         spdEl.textContent = d.speed_kmh !== null ? d.speed_kmh.toFixed(1) : '—';
         distEl.textContent = d.distance_km.toFixed(2) + ' km';
         document.getElementById('val-avg-spd').textContent = d.avg_speed_kmh !== null && d.avg_speed_kmh !== undefined ? d.avg_speed_kmh.toFixed(1) : '—';
-        document.getElementById('val-max-spd').textContent = d.max_speed_kmh !== null && d.max_speed_kmh !== undefined ? d.max_speed_kmh.toFixed(1) : '—';
       }
+
+      document.getElementById('val-watts').textContent = d.watts || 0;
+      document.getElementById('val-wkg').textContent = (d.w_kg || 0).toFixed(1);
 
       // Heart Rate & Zone
       const hrEl = document.getElementById('val-hr');
@@ -1431,6 +1836,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         workoutStatusEl.textContent = 'Workout Paused';
         workoutStatusEl.style.color = '#f59e0b';
       }
+
+      // Interval Engine Update
+      updateIntervalEngine(elapsed, d.cadence);
 
       // Sensor Status Dots & Tooltips
       if (d.sensors) {
@@ -1474,6 +1882,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
       const maxS = isImperial ? d.max_speed_mph : d.max_speed_kmh;
       const u = isImperial ? 'MPH' : 'KM/H';
       document.getElementById('sum-spd').textContent = `${avgS !== null ? avgS.toFixed(1) : '—'} / ${maxS !== null ? maxS.toFixed(1) : '—'} ${u}`;
+      document.getElementById('sum-power').textContent = `${d.avg_watts || '—'} / ${d.max_watts || '—'} W`;
+      document.getElementById('sum-wkg').textContent = `${d.avg_w_kg ? d.avg_w_kg.toFixed(1) : '—'} W/kg`;
       document.getElementById('summary-modal').classList.add('open');
     }
 
@@ -1483,7 +1893,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
     // Keyboard Shortcuts
     document.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
       if (e.code === 'Space') {
         e.preventDefault();
         togglePlay();
@@ -1548,6 +1958,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
     document.getElementById('btn-summary').onclick = showSummary;
     document.getElementById('btn-close-summary').onclick = closeSummary;
     document.getElementById('btn-done-summary').onclick = closeSummary;
+    document.getElementById('btn-export-tcx').onclick = () => {
+      window.location.href = '/api/workout/export.tcx';
+    };
 
     document.getElementById('btn-timer-toggle').onclick = () => {
       fetch('/api/workout/toggle', { method: 'POST' });
@@ -1573,11 +1986,13 @@ INDEX_HTML = r"""<!DOCTYPE html>
       const pl = document.getElementById('input-playlist').value.trim();
       const wheel = parseFloat(document.getElementById('input-wheel').value);
       const maxhr = parseInt(document.getElementById('input-maxhr').value);
+      const weight = parseFloat(document.getElementById('input-weight').value);
+      currentProgram = document.getElementById('select-program').value;
       
       fetch('/api/settings', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({playlist_id: pl, wheel_circ_mm: wheel, max_hr: maxhr})
+        body: JSON.stringify({playlist_id: pl, wheel_circ_mm: wheel, max_hr: maxhr, rider_weight_kg: weight})
       }).then(() => {
         modal.classList.remove('open');
         if (pl && pl !== playlistId) {
@@ -1612,7 +2027,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
 
 async def handle_http_request(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, state: WorkoutState) -> None:
-    """Lightweight built-in HTTP and SSE server."""
+    """Lightweight built-in HTTP, SSE, and TCX export server."""
     try:
         req_line = await reader.readline()
         if not req_line:
@@ -1675,6 +2090,21 @@ async def handle_http_request(reader: asyncio.StreamReader, writer: asyncio.Stre
                     break
                 await asyncio.sleep(0.2)  # 5Hz update rate
 
+        elif path == "/api/workout/export.tcx" and method == "GET":
+            tcx_data = generate_tcx(state).encode("utf-8")
+            date_str = time.strftime("%Y%m%d_%H%M%S", time.localtime(state.workout_start_wall))
+            fn = f"spin_workout_{date_str}.tcx"
+            resp = (
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Type: application/vnd.garmin.tcx+xml\r\n"
+                b"Content-Disposition: attachment; filename=\"" + fn.encode() + b"\"\r\n"
+                b"Content-Length: " + str(len(tcx_data)).encode() + b"\r\n"
+                b"Connection: close\r\n\r\n" + tcx_data
+            )
+            writer.write(resp)
+            await writer.drain()
+            writer.close()
+
         elif path == "/api/workout/reset" and method == "POST":
             state.reset_workout()
             writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"ok\":true}")
@@ -1724,6 +2154,17 @@ async def handle_http_request(reader: asyncio.StreamReader, writer: asyncio.Stre
                     except (ValueError, TypeError):
                         errors.append("Invalid max HR")
 
+                new_weight = state.rider_weight_kg
+                if "rider_weight_kg" in data:
+                    try:
+                        w_val = float(data["rider_weight_kg"])
+                        if math.isfinite(w_val) and 30.0 <= w_val <= 250.0:
+                            new_weight = w_val
+                        else:
+                            errors.append("Rider weight must be between 30kg and 250kg")
+                    except (ValueError, TypeError):
+                        errors.append("Invalid rider weight")
+
                 if errors:
                     err_json = json.dumps({"ok": False, "errors": errors}).encode()
                     writer.write(b"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n" + err_json)
@@ -1731,6 +2172,7 @@ async def handle_http_request(reader: asyncio.StreamReader, writer: asyncio.Stre
                     state.playlist_id = new_pl
                     state.wheel_circ_m = new_circ
                     state.max_hr = new_maxhr
+                    state.rider_weight_kg = new_weight
                     writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"ok\":true}")
                 await writer.drain()
                 writer.close()
@@ -2026,22 +2468,33 @@ def _self_check() -> int:
     assert z4["zone"] == 4 and z4["name"] == "Anaerobic"
 
     # WorkoutState test: distance accumulation & reset safety
-    st = WorkoutState()
+    st = WorkoutState(rider_weight_kg=75.0)
     st.add_distance_delta(0.5)
     st.update_telemetry(hr=140, cadence=90.0, speed_mph=20.0)
     snap = st.get_snapshot()
     assert snap["distance_mi"] == 0.5
     assert snap["hr"] == 140
+    assert snap["watts"] > 0
+    assert snap["w_kg"] > 0.0
+
+    # TCX Generation test
+    tcx_out = generate_tcx(st)
+    assert "<TrainingCenterDatabase" in tcx_out
+    assert "<Activity Sport=\"Biking\">" in tcx_out
+    assert "<HeartRateBpm>" in tcx_out
+    assert "<ns2:Watts>" in tcx_out
+
     st.reset_workout()
     snap2 = st.get_snapshot()
     assert snap2["distance_mi"] == 0.0
     assert snap2["avg_hr"] is None
+    assert snap2["avg_watts"] is None
     # Next delta only adds delta, not restoring previous distance
     st.add_distance_delta(0.01)
     snap3 = st.get_snapshot()
     assert snap3["distance_mi"] == 0.01
 
-    print("self-check ok: all parsers, wheel speed, and zone logic validated")
+    print("self-check ok: all parsers, wheel speed, virtual power, TCX exporter, and zone logic validated")
     return 0
 
 

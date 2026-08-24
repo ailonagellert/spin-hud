@@ -132,6 +132,31 @@ def test_html_dynamic_playlist_injection() -> None:
     rendered = INDEX_HTML.replace("__PLAYLIST_ID__", custom_pl)
     assert f'let playlistId = "{custom_pl}";' in rendered
     assert f'value="{custom_pl}"' in rendered
+    assert "btn-export-tcx" in rendered
+    assert "val-watts" in rendered
+    assert "interval-cue-bar" in rendered
+
+
+def test_virtual_power_and_tcx_export() -> None:
+    """Validate indoor cycling virtual power calculation and TCX XML export."""
+    from spin_hud import generate_tcx
+
+    state = WorkoutState(rider_weight_kg=75.0)
+    state.add_distance_delta(1.0)
+    state.update_telemetry(hr=150, cadence=85.0, speed_mph=20.0)
+
+    snap = state.get_snapshot()
+    assert snap["watts"] > 0
+    assert snap["w_kg"] > 0.0
+    assert snap["rider_weight_kg"] == 75.0
+
+    tcx = generate_tcx(state)
+    assert '<?xml version="1.0" encoding="UTF-8"?>' in tcx
+    assert '<TrainingCenterDatabase' in tcx
+    assert '<Activity Sport="Biking">' in tcx
+    assert '<ns2:Watts>' in tcx
+    assert '<HeartRateBpm>' in tcx
+    assert '<Cadence>' in tcx
 
 
 def main() -> int:
@@ -141,10 +166,12 @@ def main() -> int:
     test_event_frequency_independent_averages()
     test_hr_zone_and_settings_bounds()
     test_html_dynamic_playlist_injection()
+    test_virtual_power_and_tcx_export()
     print("All spin-hud regression test suites passed successfully!")
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
 
