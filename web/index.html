@@ -308,7 +308,8 @@
     .layout-left .telemetry-dock {
       position: absolute;
       left: 32px;
-      top: 172px;
+      right: auto;
+      top: 188px;
       bottom: 16px;
       width: 380px;
       max-width: 380px;
@@ -334,18 +335,28 @@
       border-radius: 3px;
     }
     .layout-left #interval-cue-bar {
-      top: 80px;
+      top: 76px;
       left: 32px;
+      right: auto;
       width: 380px;
       min-width: 380px;
       max-width: 380px;
+      z-index: 45;
+    }
+    .layout-left .yt-container {
+      top: 76px;
+      right: 32px;
+      left: auto;
+      width: 420px;
+      max-width: 420px;
       z-index: 45;
     }
 
     .layout-right .telemetry-dock {
       position: absolute;
       right: 32px;
-      top: 154px;
+      left: auto;
+      top: 188px;
       bottom: 16px;
       width: 380px;
       max-width: 380px;
@@ -370,26 +381,38 @@
       background: rgba(0, 229, 255, 0.4);
       border-radius: 3px;
     }
-    .layout-right .yt-container {
-      top: 80px;
+    .layout-right #interval-cue-bar {
+      top: 76px;
       right: 32px;
+      left: auto;
       width: 380px;
+      min-width: 380px;
       max-width: 380px;
+      z-index: 45;
+    }
+    .layout-right .yt-container {
+      top: 76px;
+      left: 32px;
+      right: auto;
+      width: 420px;
+      max-width: 420px;
+      align-items: flex-start;
       z-index: 45;
     }
 
     .layout-left .telemetry-card,
     .layout-right .telemetry-card {
       flex: 0 0 auto;
-      padding: 10px 16px;
+      padding: 9px 16px;
       border-radius: 16px;
-      min-height: 96px;
+      min-height: 88px;
+      max-height: 98px;
       gap: 2px;
     }
 
     .layout-left .card-value,
     .layout-right .card-value {
-      font-size: 38px;
+      font-size: 36px;
       line-height: 1;
       font-weight: 800;
     }
@@ -397,7 +420,7 @@
     .layout-left .card-main,
     .layout-right .card-main {
       margin: 2px 0;
-      gap: 8px;
+      gap: 6px;
     }
 
     .layout-left .card-unit,
@@ -411,26 +434,42 @@
       font-size: 11.5px;
     }
 
+    .layout-left .btn-ctrl,
+    .layout-right .btn-ctrl {
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
+      min-height: 32px;
+      font-size: 13px;
+    }
+
     @media (max-height: 900px) {
-      .layout-left .telemetry-dock {
-        top: 168px;
-        bottom: 10px;
-        gap: 6px;
+      .layout-left #interval-cue-bar,
+      .layout-right #interval-cue-bar {
+        top: 64px;
+        padding: 7px 12px;
+        gap: 4px;
       }
+      .layout-left .yt-container,
+      .layout-right .yt-container {
+        top: 64px;
+      }
+      .layout-left .telemetry-dock,
       .layout-right .telemetry-dock {
-        top: 150px;
+        top: 162px;
         bottom: 10px;
         gap: 6px;
       }
       .layout-left .telemetry-card,
       .layout-right .telemetry-card {
-        padding: 7px 14px;
-        min-height: 82px;
+        padding: 6px 14px;
+        min-height: 74px;
+        max-height: 84px;
         border-radius: 14px;
       }
       .layout-left .card-value,
       .layout-right .card-value {
-        font-size: 32px;
+        font-size: 30px;
       }
       .layout-left .card-main,
       .layout-right .card-main {
@@ -445,30 +484,61 @@
       .layout-right .card-footer {
         font-size: 11px;
       }
+      .layout-left .btn-ctrl,
+      .layout-right .btn-ctrl {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        min-height: 28px;
+        font-size: 12px;
+      }
     }
 
     @media (max-height: 750px) {
-      .layout-left .telemetry-dock {
-        top: 154px;
-        bottom: 6px;
-        gap: 4px;
+      .layout-left #interval-cue-bar,
+      .layout-right #interval-cue-bar {
+        top: 52px;
+        padding: 5px 10px;
+        gap: 3px;
       }
+      .layout-left .yt-container,
+      .layout-right .yt-container {
+        top: 52px;
+      }
+      .layout-left .telemetry-dock,
       .layout-right .telemetry-dock {
-        top: 142px;
+        top: 138px;
         bottom: 6px;
         gap: 4px;
       }
       .layout-left .telemetry-card,
       .layout-right .telemetry-card {
-        padding: 5px 12px;
-        min-height: 70px;
+        padding: 4px 12px;
+        min-height: 62px;
+        max-height: 70px;
         border-radius: 12px;
       }
       .layout-left .card-value,
       .layout-right .card-value {
-        font-size: 26px;
+        font-size: 24px;
+      }
+      .layout-left .card-unit,
+      .layout-right .card-unit {
+        font-size: 11px;
+      }
+      .layout-left .card-footer,
+      .layout-right .card-footer {
+        font-size: 10px;
       }
       .card-label {
+        font-size: 10.5px;
+      }
+      .layout-left .btn-ctrl,
+      .layout-right .btn-ctrl {
+        width: 24px;
+        height: 24px;
+        min-width: 24px;
+        min-height: 24px;
         font-size: 11px;
       }
     }
@@ -722,20 +792,21 @@
 
     .interval-cue-bar {
       position: absolute;
-      top: 90px;
+      top: 84px;
       left: 32px;
       background: var(--glass-bg);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       border: 1px solid var(--glass-border);
       border-radius: 16px;
-      padding: 12px 18px;
+      padding: 10px 16px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 5px;
       min-width: 350px;
       max-width: 480px;
       box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+      box-sizing: border-box;
       z-index: 50;
       transition: all 0.3s ease;
     }
@@ -744,9 +815,9 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 800;
-      gap: 10px;
+      gap: 8px;
     }
 
     .program-select-dropdown {
@@ -754,14 +825,18 @@
       border: 1px solid var(--glass-border);
       color: var(--accent-cyan);
       font-family: inherit;
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 800;
       padding: 4px 8px;
       border-radius: 8px;
       cursor: pointer;
       outline: none;
       transition: all 0.2s;
-      min-height: 28px;
+      min-height: 26px;
+      max-width: 175px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .program-select-dropdown:hover {
@@ -782,24 +857,28 @@
     }
 
     .cue-interval-badge {
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 700;
       color: #fff;
       background: rgba(255, 255, 255, 0.08);
       border: 1px solid var(--glass-border);
-      padding: 2px 8px;
+      padding: 2px 7px;
       border-radius: 6px;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 110px;
     }
 
     .interval-target-pill {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
-      padding: 3px 8px;
+      padding: 3px 7px;
       border-radius: 6px;
       background: rgba(255, 255, 255, 0.1);
       border: 1px solid var(--glass-border);
+      white-space: nowrap;
     }
 
     .interval-progress-bg {

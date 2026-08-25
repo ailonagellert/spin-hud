@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -48,7 +49,11 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	rendered := strings.ReplaceAll(s.indexHTML, "__PLAYLIST_ID__", s.State.PlaylistID)
+	html := s.indexHTML
+	if data, err := os.ReadFile("web/index.html"); err == nil && len(data) > 0 {
+		html = string(data)
+	}
+	rendered := strings.ReplaceAll(html, "__PLAYLIST_ID__", s.State.PlaylistID)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
