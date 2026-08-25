@@ -2,7 +2,7 @@
 
 > A sleek, glassmorphic, Peloton-style workout HUD for indoor spin bikes with live Bluetooth LE telemetry (Garmin Heart Rate, Magene Cadence & Speed), virtual power meter, video-matched interval coaching programs, Strava/Garmin .TCX export, and embedded fullscreen YouTube playlist video player.
 
-![Spin Studio Workout HUD Overlay](img/hud_overlay.png)
+![Spin Studio Workout HUD Overlay](img/hud_overlay2.png)
 
 ---
 
