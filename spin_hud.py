@@ -2011,16 +2011,71 @@ INDEX_HTML = r"""<!DOCTYPE html>
         ]
       }
     };
+
+    const VIDEO_ID_TO_PROGRAM = {
+      "4Ek31_3PMW4": "v_cardio20",
+      "V-HmspieYjE": "v_sweetspot",
+      "eNyVyngn0l8": "v_pyramid",
+      "pH4ISSkJ4bw": "v_surges"
+    };
+
+    const PROGRAM_TO_VIDEO_ID = {
+      "v_cardio20": "4Ek31_3PMW4",
+      "v_sweetspot": "V-HmspieYjE",
+      "v_pyramid": "eNyVyngn0l8",
+      "v_surges": "pH4ISSkJ4bw"
+    };
+
     let currentProgram = localStorage.getItem('spin_hud_program') || 'video_sync';
 
-    function setProgram(prog) {
+    function getActiveVideoId() {
+      if (player && typeof player.getVideoData === 'function') {
+        const vd = player.getVideoData();
+        if (vd && vd.video_id) return vd.video_id;
+      }
+      if (player && typeof player.getPlaylist === 'function' && typeof player.getPlaylistIndex === 'function') {
+        const pl = player.getPlaylist();
+        const idx = player.getPlaylistIndex();
+        if (pl && idx >= 0 && idx < pl.length) return pl[idx];
+      }
+      return '';
+    }
+
+    function setProgram(prog, syncVideo = true) {
       currentProgram = prog || 'video_sync';
       try { localStorage.setItem('spin_hud_program', currentProgram); } catch (e) {}
       const quickSelect = document.getElementById('quick-select-program');
       if (quickSelect) quickSelect.value = currentProgram;
       const modalSelect = document.getElementById('select-program');
       if (modalSelect) modalSelect.value = currentProgram;
-      const elapsed = latestSnapshot ? (latestSnapshot.elapsed_sec || 0) : 0;
+
+      // If user switched program and it maps to a playlist video, jump to that video
+      if (syncVideo && PROGRAM_TO_VIDEO_ID[currentProgram] && player) {
+        const targetVid = PROGRAM_TO_VIDEO_ID[currentProgram];
+        const currentVid = getActiveVideoId();
+        if (currentVid !== targetVid) {
+          if (player.getPlaylist && player.playVideoAt) {
+            const pl = player.getPlaylist();
+            if (pl && Array.isArray(pl)) {
+              const idx = pl.indexOf(targetVid);
+              if (idx !== -1) {
+                player.playVideoAt(idx);
+              } else if (player.loadVideoById) {
+                player.loadVideoById(targetVid);
+              }
+            } else if (player.loadVideoById) {
+              player.loadVideoById(targetVid);
+            }
+          } else if (player.loadVideoById) {
+            player.loadVideoById(targetVid);
+          }
+        }
+      }
+
+      const isVideoProg = currentProgram === 'video_sync' || currentProgram === 'auto' || currentProgram.startsWith('v_');
+      const elapsed = (player && isVideoProg && typeof player.getCurrentTime === 'function')
+        ? Math.floor(player.getCurrentTime())
+        : (latestSnapshot ? (latestSnapshot.elapsed_sec || 0) : 0);
       const cad = latestSnapshot ? latestSnapshot.cadence : null;
       updateIntervalEngine(elapsed, cad);
     }
@@ -2067,20 +2122,38 @@ INDEX_HTML = r"""<!DOCTYPE html>
         playBtn.textContent = '▶';
         setWorkoutRunning(false);
       }
-      const elapsed = (player && typeof player.getCurrentTime === 'function') ? Math.floor(player.getCurrentTime()) : (latestSnapshot ? latestSnapshot.elapsed_sec : 0);
+      const isVideoProg = currentProgram === 'video_sync' || currentProgram === 'auto' || currentProgram.startsWith('v_');
+      const elapsed = (player && isVideoProg && typeof player.getCurrentTime === 'function')
+        ? Math.floor(player.getCurrentTime())
+        : (latestSnapshot ? latestSnapshot.elapsed_sec : 0);
       const cad = latestSnapshot ? latestSnapshot.cadence : null;
       updateIntervalEngine(elapsed, cad);
       renderPlaylist();
     }
 
     function updateVideoTitle() {
+      const vidId = getActiveVideoId();
       if (player && player.getVideoData) {
         const data = player.getVideoData();
         if (data && data.title) {
           document.getElementById('yt-now-playing').textContent = data.title;
         }
       }
-      const elapsed = (player && typeof player.getCurrentTime === 'function') ? Math.floor(player.getCurrentTime()) : (latestSnapshot ? latestSnapshot.elapsed_sec : 0);
+
+      // Automatically sync workout program to the matching video profile!
+      if (vidId && VIDEO_ID_TO_PROGRAM[vidId]) {
+        const matchedProg = VIDEO_ID_TO_PROGRAM[vidId];
+        if (currentProgram !== matchedProg) {
+          setProgram(matchedProg, false);
+        }
+      } else if (vidId && !VIDEO_ID_TO_PROGRAM[vidId] && currentProgram.startsWith('v_')) {
+        setProgram('video_sync', false);
+      }
+
+      const isVideoProg = currentProgram === 'video_sync' || currentProgram === 'auto' || currentProgram.startsWith('v_');
+      const elapsed = (player && isVideoProg && typeof player.getCurrentTime === 'function')
+        ? Math.floor(player.getCurrentTime())
+        : (latestSnapshot ? latestSnapshot.elapsed_sec : 0);
       const cad = latestSnapshot ? latestSnapshot.cadence : null;
       updateIntervalEngine(elapsed, cad);
     }
@@ -2142,10 +2215,29 @@ INDEX_HTML = r"""<!DOCTYPE html>
         item.appendChild(num);
         item.appendChild(title);
 
+        if (VIDEO_WORKOUT_PROFILES[vidId]) {
+          const badge = document.createElement('span');
+          badge.style.fontSize = '10px';
+          badge.style.fontWeight = '700';
+          badge.style.padding = '2px 6px';
+          badge.style.borderRadius = '4px';
+          badge.style.background = 'rgba(0, 229, 255, 0.15)';
+          badge.style.color = 'var(--accent-cyan)';
+          badge.style.border = '1px solid rgba(0, 229, 255, 0.3)';
+          badge.style.whiteSpace = 'nowrap';
+          badge.textContent = VIDEO_WORKOUT_PROFILES[vidId].name;
+          item.appendChild(badge);
+        }
+
         item.onclick = (e) => {
           e.stopPropagation();
           if (player.playVideoAt) {
             player.playVideoAt(idx);
+          }
+          if (VIDEO_ID_TO_PROGRAM[vidId]) {
+            setProgram(VIDEO_ID_TO_PROGRAM[vidId], false);
+          } else {
+            setProgram('video_sync', false);
           }
           togglePlaylistDrawer(false);
         };
@@ -2165,27 +2257,19 @@ INDEX_HTML = r"""<!DOCTYPE html>
       let prog = WORKOUT_PROGRAMS[currentProgram] || WORKOUT_PROGRAMS.open;
       let effectiveElapsed = elapsedSec;
 
+      const vidId = getActiveVideoId();
+      const isVideoProg = currentProgram === 'video_sync' || currentProgram === 'auto' || currentProgram.startsWith('v_');
+
       if (currentProgram === 'video_sync' || currentProgram === 'auto') {
-        let vidId = '';
-        if (player && player.getVideoData) {
-          const vd = player.getVideoData();
-          if (vd && vd.video_id) vidId = vd.video_id;
-        }
-        if (!vidId && player && player.getPlaylist && player.getPlaylistIndex) {
-          const pl = player.getPlaylist();
-          const idx = player.getPlaylistIndex();
-          if (pl && idx >= 0 && idx < pl.length) {
-            vidId = pl[idx];
-          }
-        }
         if (vidId && VIDEO_WORKOUT_PROFILES[vidId]) {
           prog = VIDEO_WORKOUT_PROFILES[vidId];
         }
-        if (player && typeof player.getCurrentTime === 'function') {
-          const curTime = player.getCurrentTime();
-          if (curTime >= 0) {
-            effectiveElapsed = Math.floor(curTime);
-          }
+      }
+
+      if (isVideoProg && player && typeof player.getCurrentTime === 'function') {
+        const curTime = player.getCurrentTime();
+        if (curTime >= 0) {
+          effectiveElapsed = Math.floor(curTime);
         }
       }
 
@@ -2541,7 +2625,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
     // Quick Workout Program Selector
     document.getElementById('quick-select-program').onchange = (e) => {
-      setProgram(e.target.value);
+      setProgram(e.target.value, true);
     };
 
     // Settings Modal
@@ -2558,7 +2642,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
       const wheel = parseFloat(document.getElementById('input-wheel').value);
       const maxhr = parseInt(document.getElementById('input-maxhr').value);
       const weight = parseFloat(document.getElementById('input-weight').value);
-      setProgram(document.getElementById('select-program').value);
+      setProgram(document.getElementById('select-program').value, true);
       
       fetch('/api/settings', {
         method: 'POST',
@@ -2594,7 +2678,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
     setInterval(updateClock, 1000);
 
     setLayout(currentLayout);
-    setProgram(currentProgram);
+    setProgram(currentProgram, false);
     initTelemetry();
   </script>
 </body>
