@@ -151,37 +151,52 @@ The HUD calculates speed and distance by tracking full 360° angular revolutions
 
 ## 🚀 Quickstart
 
-### 1. Run Prebuilt Binary (Windows)
-Double click `spin-hud.exe` from `\\gnas\web\spin-hud\spin-hud.exe` (or your local checkout):
-```cmd
-spin-hud.exe
-```
+### 1. Clone & Build (Go 1.21+)
 
-### 2. Command-Line Options
 ```bash
-# Launch with custom YouTube playlist
-spin-hud.exe --playlist "https://youtube.com/playlist?list=YOUR_PLAYLIST_ID"
+# Clone the repository
+git clone https://github.com/ailonagellert/spin-hud.git
+cd spin-hud
 
-# Enable LAN access (open on iPad/tablet at http://<server-ip>:8080)
-spin-hud.exe --lan
-
-# Run on custom port without auto-opening browser
-spin-hud.exe --port 9000 --no-browser
-
-# Scan nearby BLE fitness sensors
-spin-hud.exe --scan
-
-# Run parser & session engine self-check
-spin-hud.exe --self-check
-```
-
-### 3. Build from Source (Go)
-```bash
-# Compile standalone Windows binary
+# Build standalone Windows binary
 go build -o spin-hud.exe main.go
 
-# Compile for Linux (Raspberry Pi ARM64)
+# Run
+./spin-hud.exe
+```
+
+> **Direct Run**: You can also run immediately without building: `go run main.go`
+
+### 2. Cross-Platform Builds
+
+```bash
+# Linux (Raspberry Pi ARM64)
 GOOS=linux GOARCH=arm64 go build -o spin-hud main.go
+
+# Linux (x64)
+GOOS=linux GOARCH=amd64 go build -o spin-hud main.go
+
+# macOS (Apple Silicon)
+GOOS=darwin GOARCH=arm64 go build -o spin-hud main.go
+```
+
+### 3. Command-Line Options
+
+```bash
+# Launch with custom YouTube playlist
+./spin-hud.exe --playlist "https://youtube.com/playlist?list=YOUR_PLAYLIST_ID"
+
+# Enable LAN access (open on iPad/tablet at http://<server-ip>:8080)
+./spin-hud.exe --lan
+
+# Run on custom port without auto-opening browser
+./spin-hud.exe --port 9000 --no-browser
+
+# Scan nearby BLE fitness sensors
+./spin-hud.exe --scan
+
+# Run parser & session engine self-check
+./spin-hud.exe --self-check
 ```
 
 ### 4. Python Prototype (Alternative)
