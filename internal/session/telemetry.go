@@ -1,7 +1,6 @@
 package session
 
 import (
-	"math"
 	"time"
 )
 
@@ -66,8 +65,7 @@ func (s *State) UpdateTelemetry(t Telemetry) {
 			if newSpd > s.maxSpdMPH {
 				s.maxSpdMPH = newSpd
 			}
-			v := newSpd * 0.44704
-			w := int(math.Round(3.5*v + 0.35*math.Pow(v, 3)))
+			w := VirtualWatts(newSpd, s.Knob)
 			s.wattsSum += float64(w)
 			s.wattsCount++
 			if w > s.maxWatts {

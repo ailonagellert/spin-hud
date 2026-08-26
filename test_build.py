@@ -149,6 +149,9 @@ def test_virtual_power_and_tcx_export() -> None:
     assert snap["watts"] > 0
     assert snap["w_kg"] > 0.0
     assert snap["rider_weight_kg"] == 75.0
+    assert snap["knob"] == "low"
+    state.set_knob("hard")
+    assert state.get_snapshot()["watts"] > snap["watts"]
 
     tcx = generate_tcx(state)
     assert '<?xml version="1.0" encoding="UTF-8"?>' in tcx

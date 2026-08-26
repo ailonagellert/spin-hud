@@ -51,6 +51,9 @@ type Snapshot struct {
 	Status        string         `json:"status"`
 	PlaylistID    string         `json:"playlist_id"`
 	RiderWeightKg float64        `json:"rider_weight_kg"`
+	Knob          string         `json:"knob"`
+	KnobLabel     string         `json:"knob_label"`
+	KnobTurns     float64        `json:"knob_turns"`
 }
 
 // Trackpoint is a periodic sample recorded for TCX export (every 2s while running).
@@ -70,6 +73,83 @@ const (
 	DefaultRiderWeightKg = 75.0
 )
 
+// Knob stops on Erich's pad-brake: lock, then CCW 1 turn / 1/4 / 1/16.
+const (
+	KnobLow  = "low"
+	KnobMed  = "med"
+	KnobHard = "hard"
+)
+
+func knobFactor(knob string) float64 {
+	switch knob {
+	case KnobMed:
+		return 2.0
+	case KnobHard:
+		return 3.5
+	default:
+		return 1.0
+	}
+}
+
+func KnobLabelOf(knob string) string {
+	switch knob {
+	case KnobMed:
+		return "MED 1/4"
+	case KnobHard:
+		return "HARD 1/16"
+	default:
+		return "LOW 1"
+	}
+}
+
+func KnobTurnsOf(knob string) float64 {
+	switch knob {
+	case KnobMed:
+		return 0.25
+	case KnobHard:
+		return 1.0 / 16
+	default:
+		return 1.0
+	}
+}
+
+func ParseKnob(knob string) string {
+	switch knob {
+	case KnobMed, KnobHard:
+		return knob
+	default:
+		return KnobLow
+	}
+}
+
+func nextKnob(cur string, tighten bool) string {
+	order := []string{KnobLow, KnobMed, KnobHard}
+	i := 0
+	for n, k := range order {
+		if k == cur {
+			i = n
+			break
+		}
+	}
+	if tighten && i < len(order)-1 {
+		return order[i+1]
+	}
+	if !tighten && i > 0 {
+		return order[i-1]
+	}
+	return order[i]
+}
+
+// VirtualWatts is the fluid curve at LOW, times the pad-brake stop.
+// ponytail: 2.0 / 3.5 are guesses from the 1 / 1/4 / 1/16 stops. Retune when a power meter exists.
+func VirtualWatts(speedMPH float64, knob string) int {
+	if speedMPH <= 0.5 {
+		return 0
+	}
+	v := speedMPH * 0.44704
+	return int(math.Round((3.5*v + 0.35*math.Pow(v, 3)) * knobFactor(knob)))
+}
+
 // State is the Go port of Python WorkoutState.
 type State struct {
 	mu sync.RWMutex
@@ -78,6 +158,7 @@ type State struct {
 	WheelCircM    float64
 	MaxHR         int
 	RiderWeightKg float64
+	Knob          string
 
 	hr       *int
 	cadence  *float64
@@ -120,6 +201,7 @@ func NewState(playlistID string) *State {
 		WheelCircM:    DefaultWheelCircM,
 		MaxHR:         DefaultMaxHR,
 		RiderWeightKg: DefaultRiderWeightKg,
+		Knob:          KnobLow,
 		sensors: SensorsSnapshot{
 			HR:      SensorState{Name: "Searching…"},
 			Cadence: SensorState{Name: "Searching…"},
@@ -176,6 +258,25 @@ func (s *State) ToggleWorkoutTimer() bool {
 		s.lastCalTime = now
 	}
 	return s.isRunning
+}
+
+func (s *State) SetKnob(knob string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Knob = ParseKnob(knob)
+}
+
+func (s *State) NudgeKnob(tighten bool) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Knob = nextKnob(s.Knob, tighten)
+	return s.Knob
+}
+
+func (s *State) KnobSnapshot() (name, label string, turns float64) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.Knob, KnobLabelOf(s.Knob), KnobTurnsOf(s.Knob)
 }
 
 // SetSensor updates sensor connectivity display state.
@@ -246,11 +347,10 @@ func (s *State) GetSnapshot() Snapshot {
 	}
 	distKM := round2(s.distanceMiles * 1.60934)
 
-	// Virtual power: watts = 3.5*v + 0.35*v^3 (v m/s), only above 0.5 mph
+	// Virtual power: fluid curve at LOW, times pad-brake stop
 	currentWatts := 0
 	if speedMPH != nil && *speedMPH > 0.5 {
-		v := *speedMPH * 0.44704
-		currentWatts = int(math.Round(3.5*v + 0.35*math.Pow(v, 3)))
+		currentWatts = VirtualWatts(*speedMPH, s.Knob)
 	}
 
 	var avgWatts *int
@@ -350,5 +450,8 @@ func (s *State) GetSnapshot() Snapshot {
 		Status:        s.status,
 		PlaylistID:    s.PlaylistID,
 		RiderWeightKg: s.RiderWeightKg,
+		Knob:          s.Knob,
+		KnobLabel:     KnobLabelOf(s.Knob),
+		KnobTurns:     KnobTurnsOf(s.Knob),
 	}
 }

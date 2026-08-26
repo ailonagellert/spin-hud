@@ -40,6 +40,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/workout/reset", s.handleReset)
 	mux.HandleFunc("/api/workout/toggle", s.handleToggle)
 	mux.HandleFunc("/api/settings", s.handleSettings)
+	mux.HandleFunc("/api/knob", s.handleKnob)
 	mux.HandleFunc("/api/youtube/title", s.handleYouTubeTitle)
 	return mux
 }
@@ -117,6 +118,29 @@ func (s *Server) handleToggle(w http.ResponseWriter, r *http.Request) {
 	running := s.State.ToggleWorkoutTimer()
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprintf(w, `{"running":%t}`, running)
+}
+
+func (s *Server) handleKnob(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var data map[string]any
+	_ = json.NewDecoder(r.Body).Decode(&data)
+	if v, ok := data["knob"]; ok {
+		s.State.SetKnob(strings.ToLower(strings.TrimSpace(fmt.Sprint(v))))
+	} else if v, ok := data["dir"]; ok {
+		dir := strings.ToLower(strings.TrimSpace(fmt.Sprint(v)))
+		s.State.NudgeKnob(dir == "tighten" || dir == "up" || dir == "+")
+	}
+	name, label, turns := s.State.KnobSnapshot()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"ok":         true,
+		"knob":       name,
+		"knob_label": label,
+		"knob_turns": turns,
+	})
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {

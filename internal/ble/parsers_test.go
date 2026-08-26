@@ -137,6 +137,28 @@ func TestVirtualPower(t *testing.T) {
 	}
 }
 
+func TestKnobMultipliesPower(t *testing.T) {
+	low := session.VirtualWatts(20, session.KnobLow)
+	med := session.VirtualWatts(20, session.KnobMed)
+	hard := session.VirtualWatts(20, session.KnobHard)
+	if low <= 0 || med <= low || hard <= med {
+		t.Fatalf("low=%d med=%d hard=%d", low, med, hard)
+	}
+	if session.VirtualWatts(0.4, session.KnobHard) != 0 {
+		t.Fatal("below 0.5 mph is 0")
+	}
+	st := session.NewState(session.DefaultPlaylistID)
+	if st.NudgeKnob(true) != session.KnobMed {
+		t.Fatal("tighten low -> med")
+	}
+	if st.NudgeKnob(false) != session.KnobLow {
+		t.Fatal("loosen med -> low")
+	}
+	if st.NudgeKnob(false) != session.KnobLow {
+		t.Fatal("loosen low stays")
+	}
+}
+
 func TestSelfCheck(t *testing.T) {
 	if SelfCheck() != 0 {
 		t.Fatal("self-check failed")

@@ -185,6 +185,34 @@ def save_device_cache(cache: dict[str, str]) -> None:
 
 DEFAULT_RIDER_WEIGHT_KG = 75.0
 
+# Pad-brake stops: lock, then CCW 1 turn / 1/4 / 1/16.
+KNOB_LEVELS = ("low", "med", "hard")
+KNOB_TURNS = {"low": 1.0, "med": 0.25, "hard": 1.0 / 16}
+# ponytail: 2.0 / 3.5 guessed from those stops. Retune when a power meter exists.
+KNOB_FACTOR = {"low": 1.0, "med": 2.0, "hard": 3.5}
+KNOB_LABEL = {"low": "LOW 1", "med": "MED 1/4", "hard": "HARD 1/16"}
+
+
+def parse_knob(knob: str) -> str:
+    k = (knob or "").strip().lower()
+    return k if k in KNOB_FACTOR else "low"
+
+
+def next_knob(cur: str, tighten: bool) -> str:
+    i = KNOB_LEVELS.index(parse_knob(cur))
+    if tighten and i < len(KNOB_LEVELS) - 1:
+        return KNOB_LEVELS[i + 1]
+    if not tighten and i > 0:
+        return KNOB_LEVELS[i - 1]
+    return KNOB_LEVELS[i]
+
+
+def virtual_watts(speed_mph: float | None, knob: str = "low") -> int:
+    if speed_mph is None or speed_mph <= 0.5:
+        return 0
+    v = speed_mph * 0.44704
+    return int(round((3.5 * v + 0.35 * (v ** 3)) * KNOB_FACTOR[parse_knob(knob)]))
+
 
 def generate_tcx(state: WorkoutState) -> str:
     """Generate a standard Training Center XML (TCX) activity file for Strava and Garmin Connect."""
@@ -303,6 +331,7 @@ class WorkoutState:
         self.wheel_circ_m = wheel_circ_m if (wheel_circ_m and math.isfinite(wheel_circ_m) and wheel_circ_m > 0) else DEFAULT_WHEEL_CIRC_M
         self.max_hr = max_hr if (max_hr and max_hr > 0) else DEFAULT_MAX_HR
         self.rider_weight_kg = rider_weight_kg if (rider_weight_kg and rider_weight_kg > 0) else DEFAULT_RIDER_WEIGHT_KG
+        self.knob = "low"
 
         # Instantaneous live metrics
         self.hr: int | None = None
@@ -390,6 +419,21 @@ class WorkoutState:
                 self.last_cal_time = now
             return self.is_running
 
+    def set_knob(self, knob: str) -> str:
+        with self.lock:
+            self.knob = parse_knob(knob)
+            return self.knob
+
+    def nudge_knob(self, tighten: bool) -> str:
+        with self.lock:
+            self.knob = next_knob(self.knob, tighten)
+            return self.knob
+
+    def knob_snapshot(self) -> dict[str, Any]:
+        with self.lock:
+            k = parse_knob(self.knob)
+            return {"knob": k, "knob_label": KNOB_LABEL[k], "knob_turns": KNOB_TURNS[k]}
+
     def set_sensor(self, kind: str, connected: bool, name: str) -> None:
         with self.lock:
             self.sensors[kind] = {"connected": connected, "name": name}
@@ -441,9 +485,7 @@ class WorkoutState:
                     if new_spd > self.max_speed_mph:
                         self.max_speed_mph = new_spd
 
-                    # Indoor cycling virtual power formula
-                    v_mps = new_spd * 0.44704
-                    w = int(round(3.5 * v_mps + 0.35 * (v_mps ** 3)))
+                    w = virtual_watts(new_spd, self.knob)
                     self.watts_sum += w
                     self.watts_count += 1
                     if w > self.max_watts:
@@ -475,11 +517,7 @@ class WorkoutState:
             dist_km = self.distance_miles * 1.60934
 
             # Virtual Power Calculation
-            if speed_val and speed_val > 0.5:
-                v_mps = speed_val * 0.44704
-                current_watts = int(round(3.5 * v_mps + 0.35 * (v_mps ** 3)))
-            else:
-                current_watts = 0
+            current_watts = virtual_watts(speed_val, self.knob)
 
             avg_watts = int(round(self.watts_sum / self.watts_count)) if self.watts_count > 0 else None
             w_kg = round(current_watts / self.rider_weight_kg, 1) if (self.rider_weight_kg > 0 and current_watts > 0) else 0.0
@@ -534,6 +572,9 @@ class WorkoutState:
                 "status": self.status,
                 "playlist_id": self.playlist_id,
                 "rider_weight_kg": self.rider_weight_kg,
+                "knob": parse_knob(self.knob),
+                "knob_label": KNOB_LABEL[parse_knob(self.knob)],
+                "knob_turns": KNOB_TURNS[parse_knob(self.knob)],
             }
 
 
@@ -2891,7 +2932,22 @@ async def handle_http_request(reader: asyncio.StreamReader, writer: asyncio.Stre
 
         elif path == "/api/workout/toggle" and method == "POST":
             running = state.toggle_workout_timer()
-            writer.write(f"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{{\"running\":{str(running).lower()}}}".encode())
+            writer.write(f'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{{"running":{str(running).lower()}}}'.encode())
+            await writer.drain()
+            writer.close()
+
+        elif path == "/api/knob" and method == "POST":
+            try:
+                data = json.loads(body.decode("utf-8")) if body else {}
+            except Exception:
+                data = {}
+            if "knob" in data:
+                state.set_knob(str(data.get("knob") or ""))
+            else:
+                direction = str(data.get("dir") or "").strip().lower()
+                state.nudge_knob(direction in ("tighten", "up", "+"))
+            out = json.dumps({"ok": True, **state.knob_snapshot()}).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n" + out)
             await writer.drain()
             writer.close()
 
@@ -3254,6 +3310,14 @@ def _self_check() -> int:
     assert snap["hr"] == 140
     assert snap["watts"] > 0
     assert snap["w_kg"] > 0.0
+
+    v = 20.0 * 0.44704
+    assert virtual_watts(20.0, "low") == int(round(3.5 * v + 0.35 * (v ** 3)))
+    assert virtual_watts(20.0, "med") == int(round((3.5 * v + 0.35 * (v ** 3)) * 2.0))
+    assert virtual_watts(20.0, "hard") == int(round((3.5 * v + 0.35 * (v ** 3)) * 3.5))
+    assert virtual_watts(0.4, "hard") == 0
+    assert st.nudge_knob(True) == "med"
+    assert st.nudge_knob(False) == "low"
 
     # TCX Generation test
     tcx_out = generate_tcx(st)
