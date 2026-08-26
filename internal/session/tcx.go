@@ -88,22 +88,17 @@ func GenerateTCX(s *State) string {
 	b.WriteString("        <Track>\n")
 
 	if len(points) == 0 {
-		fallbackHR := avgHR
-		if fallbackHR == 0 {
-			fallbackHR = 120
+		var hrPtr *int
+		if avgHR > 0 {
+			hrPtr = &avgHR
 		}
-		fallbackCad := avgCad
-		if fallbackCad == 0 {
-			fallbackCad = 80
-		}
-		hr := fallbackHR
 		points = []Trackpoint{{
-			Time:    startWall,
-			HR:      &hr,
-			Cadence: fallbackCad,
-			DistM:   totalDistM,
+			Time:     startWall,
+			HR:       hrPtr,
+			Cadence:  avgCad,
+			DistM:    totalDistM,
 			SpeedMps: 0.0,
-			Watts:   avgWatts,
+			Watts:    avgWatts,
 		}}
 	}
 

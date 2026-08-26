@@ -270,8 +270,8 @@ def generate_tcx(state: WorkoutState) -> str:
     if not points:
         points = [{
             "time": state.workout_start_wall,
-            "hr": avg_hr or 120,
-            "cadence": avg_cad or 80,
+            "hr": avg_hr if avg_hr > 0 else None,
+            "cadence": avg_cad if avg_cad > 0 else None,
             "dist_m": total_dist_m,
             "speed_mps": 0.0,
             "watts": avg_watts or 0,
@@ -579,19 +579,6 @@ class WorkoutState:
 
 
 # Embedded HTML/CSS/JS Studio Web App
-def _load_index_html() -> str:
-    """Load UI template from web/index.html next to script if present, else fallback to embedded."""
-    candidate = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "index.html")
-    if os.path.exists(candidate):
-        try:
-            with open(candidate, "r", encoding="utf-8") as f:
-                return f.read()
-        except Exception:
-            pass
-    return INDEX_HTML
-
-
-# Embedded HTML/CSS/JS Studio Web App (Fallback)
 def _load_index_html() -> str:
     """Load UI template from web/index.html next to script if present, else fallback to embedded."""
     candidate = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "index.html")

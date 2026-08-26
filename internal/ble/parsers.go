@@ -28,42 +28,6 @@ func ParseHR(data []byte) (int, bool) {
 	return int(data[1]), true
 }
 
-// ParseCSC is the legacy parser for crank mode / test compatibility.
-// Returns (rpm, newRef, mode).
-func ParseCSC(data []byte, prev *CSCRef) (rpm float64, ok bool, now *CSCRef, mode string) {
-	if len(data) == 0 {
-		return 0, false, prev, "empty"
-	}
-	flags := data[0]
-	off := 1
-	if flags&0x01 != 0 {
-		if len(data) < off+6 {
-			return 0, false, prev, "wheel"
-		}
-		off += 6
-	}
-	if flags&0x02 == 0 {
-		if flags&0x01 != 0 {
-			return 0, false, prev, "wheel"
-		}
-		return 0, false, prev, "empty"
-	}
-	if len(data) < off+4 {
-		return 0, false, prev, "crank"
-	}
-	revs := binary.LittleEndian.Uint16(data[off : off+2])
-	ev := binary.LittleEndian.Uint16(data[off+2 : off+4])
-	ref := &CSCRef{Value: uint32(revs), Event: ev}
-	if prev == nil {
-		return 0, false, ref, "crank"
-	}
-	dRevs := (uint32(revs) - prev.Value) & 0xFFFF
-	dTicks := (ev - prev.Event) & 0xFFFF
-	if dTicks == 0 {
-		return 0, false, ref, "crank"
-	}
-	return float64(dRevs) * 1024 * 60 / float64(dTicks), true, ref, "crank"
-}
 
 // ParseCSCCrank parses crank cadence (RPM) from a CSC measurement (0x2A5B).
 // Returns (rpm, ok, newRef). A counter reset/discontinuity or implausible

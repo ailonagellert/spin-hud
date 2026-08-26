@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"tinygo.org/x/bluetooth"
@@ -62,6 +63,9 @@ type bleManager struct {
 	activeSpd  *bluetooth.Device
 	connecting map[string]bool
 	cache      deviceCache
+
+	lastCrankNano atomic.Int64
+	lastWheelNano atomic.Int64
 }
 
 func newBLEManager() SensorManager {
@@ -140,11 +144,6 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 		return
 	}
 
-	var (
-		lastCrank time.Time
-		lastWheel time.Time
-	)
-
 	// Attempt fast startup connection using cached device addresses
 	m.mu.Lock()
 	cachedHR := m.cache.HR
@@ -159,12 +158,12 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 	}
 	if cachedCad != "" {
 		if mac, err := bluetooth.ParseMAC(cachedCad); err == nil {
-			go m.connectCad(state, bluetooth.Address{MACAddress: bluetooth.MACAddress{MAC: mac}}, "Cadence 57177 (cached)", &lastCrank)
+			go m.connectCad(state, bluetooth.Address{MACAddress: bluetooth.MACAddress{MAC: mac}}, "Cadence 57177 (cached)")
 		}
 	}
 	if cachedSpd != "" {
 		if mac, err := bluetooth.ParseMAC(cachedSpd); err == nil {
-			go m.connectSpd(state, bluetooth.Address{MACAddress: bluetooth.MACAddress{MAC: mac}}, "Speed 40452 (cached)", &lastWheel)
+			go m.connectSpd(state, bluetooth.Address{MACAddress: bluetooth.MACAddress{MAC: mac}}, "Speed 40452 (cached)")
 		}
 	}
 
@@ -185,11 +184,13 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 		snap := state.GetSnapshot()
 
 		// Stale data watchdog (if pedals or wheel stop rotating)
-		if activeCad != nil && !lastCrank.IsZero() && now.Sub(lastCrank) > 3*time.Second && snap.Cadence != nil && *snap.Cadence > 0 {
+		lastCrankNano := m.lastCrankNano.Load()
+		if activeCad != nil && lastCrankNano > 0 && now.Sub(time.Unix(0, lastCrankNano)) > 3*time.Second && snap.Cadence != nil && *snap.Cadence > 0 {
 			zero := 0.0
 			state.UpdateTelemetry(session.Telemetry{Cadence: &zero})
 		}
-		if activeSpd != nil && !lastWheel.IsZero() && now.Sub(lastWheel) > 3*time.Second && snap.SpeedMPH != nil && *snap.SpeedMPH > 0 {
+		lastWheelNano := m.lastWheelNano.Load()
+		if activeSpd != nil && lastWheelNano > 0 && now.Sub(time.Unix(0, lastWheelNano)) > 3*time.Second && snap.SpeedMPH != nil && *snap.SpeedMPH > 0 {
 			zero := 0.0
 			state.UpdateTelemetry(session.Telemetry{SpeedMPH: &zero})
 		}
@@ -355,11 +356,11 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 			if needSpd && dev.isSpd && !dev.isCad {
 				needSpd = false
 				assigned[addr] = true
-				go m.connectSpd(state, dev.result.Address, dev.label, &lastWheel)
+				go m.connectSpd(state, dev.result.Address, dev.label)
 			} else if needCad && dev.isCad && !dev.isSpd {
 				needCad = false
 				assigned[addr] = true
-				go m.connectCad(state, dev.result.Address, dev.label, &lastCrank)
+				go m.connectCad(state, dev.result.Address, dev.label)
 			}
 		}
 
@@ -386,11 +387,11 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 			if needCad {
 				needCad = false
 				assigned[addr] = true
-				go m.connectCad(state, dev.result.Address, dev.label, &lastCrank)
+				go m.connectCad(state, dev.result.Address, dev.label)
 			} else if needSpd {
 				needSpd = false
 				assigned[addr] = true
-				go m.connectSpd(state, dev.result.Address, dev.label, &lastWheel)
+				go m.connectSpd(state, dev.result.Address, dev.label)
 			}
 		}
 
@@ -457,7 +458,7 @@ func (m *bleManager) connectHR(state *session.State, addr bluetooth.Address, lab
 	log.Printf("BLE: Connected HR: %s (%s)", label, addr.String())
 }
 
-func (m *bleManager) connectCad(state *session.State, addr bluetooth.Address, label string, lastCrank *time.Time) {
+func (m *bleManager) connectCad(state *session.State, addr bluetooth.Address, label string) {
 	m.mu.Lock()
 	if m.connecting["cadence"] {
 		m.mu.Unlock()
@@ -504,7 +505,7 @@ func (m *bleManager) connectCad(state *session.State, addr bluetooth.Address, la
 		refMu.Unlock()
 
 		if ok {
-			*lastCrank = time.Now()
+			m.lastCrankNano.Store(time.Now().UnixNano())
 			state.UpdateTelemetry(session.Telemetry{Cadence: &rpm})
 		}
 	})
@@ -524,7 +525,7 @@ func (m *bleManager) connectCad(state *session.State, addr bluetooth.Address, la
 	log.Printf("BLE: Connected Cadence: %s (%s)", label, addr.String())
 }
 
-func (m *bleManager) connectSpd(state *session.State, addr bluetooth.Address, label string, lastWheel *time.Time) {
+func (m *bleManager) connectSpd(state *session.State, addr bluetooth.Address, label string) {
 	m.mu.Lock()
 	if m.connecting["speed"] {
 		m.mu.Unlock()
@@ -566,11 +567,11 @@ func (m *bleManager) connectSpd(state *session.State, addr bluetooth.Address, la
 
 	err = chars[0].EnableNotifications(func(buf []byte) {
 		refMu.Lock()
-		spdMPH, deltaMi, newRef := ParseCSCWheel(buf, wheelRef, state.WheelCircM)
+		spdMPH, deltaMi, newRef := ParseCSCWheel(buf, wheelRef, state.WheelCirc())
 		wheelRef = newRef
 		refMu.Unlock()
 
-		*lastWheel = time.Now()
+		m.lastWheelNano.Store(time.Now().UnixNano())
 		state.AddDistanceDelta(deltaMi)
 		state.UpdateTelemetry(session.Telemetry{SpeedMPH: &spdMPH})
 	})
