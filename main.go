@@ -39,28 +39,6 @@ func openBrowser(url string) {
 	}
 }
 
-func extractPlaylistID(s string) string {
-	if idx := indexOf(s, "list="); idx >= 0 {
-		rest := s[idx+len("list="):]
-		for i := 0; i < len(rest); i++ {
-			if rest[i] == '&' {
-				return rest[:i]
-			}
-		}
-		return rest
-	}
-	return s
-}
-
-func indexOf(s, sub string) int {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return i
-		}
-	}
-	return -1
-}
-
 func main() {
 	scan := flag.Bool("scan", false, "Scan nearby BLE sensors")
 	selfCheck := flag.Bool("self-check", false, "Run parser & engine validation")
@@ -83,7 +61,7 @@ func main() {
 		return
 	}
 
-	pl := extractPlaylistID(*playlist)
+	pl := session.ExtractPlaylistID(*playlist)
 	host := "127.0.0.1"
 	if *lan {
 		host = "0.0.0.0"

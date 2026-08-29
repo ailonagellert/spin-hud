@@ -26,12 +26,51 @@ type Server struct {
 	State     *session.State
 	indexHTML string
 	Strava    *strava.Client
+
+	hubMu       sync.Mutex
+	subscribers map[chan []byte]struct{}
 }
 
 // New builds the HTTP handler set; indexHTML is the embedded UI with the
 // __PLAYLIST_ID__ placeholder still present.
 func New(state *session.State, indexHTML string, sc *strava.Client) *Server {
-	return &Server{State: state, indexHTML: indexHTML, Strava: sc}
+	s := &Server{
+		State:       state,
+		indexHTML:   indexHTML,
+		Strava:      sc,
+		subscribers: make(map[chan []byte]struct{}),
+	}
+	go s.runBroadcaster()
+	return s
+}
+
+func (s *Server) runBroadcaster() {
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+	for range ticker.C {
+		s.hubMu.Lock()
+		numSubs := len(s.subscribers)
+		s.hubMu.Unlock()
+		if numSubs == 0 {
+			continue
+		}
+
+		snap := s.State.GetSnapshot()
+		data, err := json.Marshal(snap)
+		if err != nil {
+			continue
+		}
+		msg := []byte(fmt.Sprintf("data: %s\n\n", data))
+
+		s.hubMu.Lock()
+		for ch := range s.subscribers {
+			select {
+			case ch <- msg:
+			default:
+			}
+		}
+		s.hubMu.Unlock()
+	}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -81,19 +120,33 @@ func (s *Server) handleTelemetry(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	ticker := time.NewTicker(200 * time.Millisecond)
-	defer ticker.Stop()
+	// Send initial snapshot immediately so client does not wait for next tick
+	snap := s.State.GetSnapshot()
+	if data, err := json.Marshal(snap); err == nil {
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		fl.Flush()
+	}
+
+	ch := make(chan []byte, 16)
+	s.hubMu.Lock()
+	s.subscribers[ch] = struct{}{}
+	s.hubMu.Unlock()
+
+	defer func() {
+		s.hubMu.Lock()
+		delete(s.subscribers, ch)
+		s.hubMu.Unlock()
+	}()
+
 	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case <-ticker.C:
-			snap := s.State.GetSnapshot()
-			data, err := json.Marshal(snap)
-			if err != nil {
-				continue
+		case msg, ok := <-ch:
+			if !ok {
+				return
 			}
-			fmt.Fprintf(w, "data: %s\n\n", data)
+			w.Write(msg)
 			fl.Flush()
 		}
 	}
@@ -164,11 +217,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 
 	newPl := s.State.PlaylistID
 	if v, ok := data["playlist_id"]; ok {
-		pl := strings.TrimSpace(fmt.Sprint(v))
-		if strings.Contains(pl, "list=") {
-			pl = strings.SplitN(pl, "list=", 2)[1]
-			pl = strings.SplitN(pl, "&", 2)[0]
-		}
+		pl := session.ExtractPlaylistID(fmt.Sprint(v))
 		if pl != "" {
 			newPl = pl
 		} else {
@@ -176,7 +225,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	newCirc := s.State.WheelCircM
+	newCirc := s.State.WheelCirc()
 	if v, ok := data["wheel_circ_mm"]; ok {
 		if f, ok2 := toFloat(v); ok2 && f >= 500 && f <= 3500 {
 			newCirc = f / 1000.0
@@ -258,18 +307,27 @@ func (s *Server) handleYouTubeTitle(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch via YouTube oEmbed
 	resp, err := httpClient.Get(fmt.Sprintf("https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=%s&format=json", vidID))
-	if err != nil || resp.StatusCode != http.StatusOK {
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"title": ""})
 		return
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"title": ""})
+		return
+	}
+
 	var payload struct {
 		Title string `json:"title"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err == nil && payload.Title != "" {
 		titleCacheMu.Lock()
+		if len(titleCache) > 500 {
+			titleCache = make(map[string]string)
+		}
 		titleCache[vidID] = payload.Title
 		titleCacheMu.Unlock()
 		w.Header().Set("Content-Type", "application/json")

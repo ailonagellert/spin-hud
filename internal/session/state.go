@@ -2,6 +2,7 @@ package session
 
 import (
 	"math"
+	"strings"
 	"sync"
 	"time"
 )
@@ -294,6 +295,13 @@ func (s *State) SetSensor(kind string, connected bool, name string) {
 	}
 }
 
+// WheelCirc returns the current wheel circumference in meters under read lock.
+func (s *State) WheelCirc() float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.WheelCircM
+}
+
 func round1(v float64) float64 { return math.Round(v*10) / 10 }
 func round2(v float64) float64 { return math.Round(v*100) / 100 }
 
@@ -322,10 +330,10 @@ func HRZone(bpm *int, maxHR int) (zone int, name string, pct int, color string) 
 	}
 }
 
-// GetSnapshot computes the SSE payload; also records trackpoints while running.
+// GetSnapshot computes the SSE payload.
 func (s *State) GetSnapshot() Snapshot {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	now := time.Now()
 	var elapsed int
@@ -364,27 +372,6 @@ func (s *State) GetSnapshot() Snapshot {
 	var avgWKg *float64
 	if s.RiderWeightKg > 0 && avgWatts != nil {
 		avgWKg = fptr(round1(float64(*avgWatts) / s.RiderWeightKg))
-	}
-
-	// Trackpoint recording every 2s while running (first one immediately)
-	if s.isRunning && now.Sub(s.lastTrackpointAt).Seconds() >= 2.0 {
-		s.lastTrackpointAt = now
-		cad := 0
-		if s.cadence != nil {
-			cad = int(math.Round(*s.cadence))
-		}
-		sMps := 0.0
-		if speedMPH != nil {
-			sMps = round2(*speedMPH * 0.44704)
-		}
-		s.trackpoints = append(s.trackpoints, Trackpoint{
-			Time:     now,
-			HR:       s.hr,
-			Cadence:  cad,
-			SpeedMps: sMps,
-			DistM:    round1(s.distanceMiles * 1609.344),
-			Watts:    currentWatts,
-		})
 	}
 
 	var avgHR, maxHROut, avgCad, maxCadOut, cadOut, maxWattsOut *int
@@ -455,3 +442,14 @@ func (s *State) GetSnapshot() Snapshot {
 		KnobTurns:     KnobTurnsOf(s.Knob),
 	}
 }
+
+// ExtractPlaylistID parses the playlist ID from a raw string or full YouTube URL.
+func ExtractPlaylistID(s string) string {
+	s = strings.TrimSpace(s)
+	if strings.Contains(s, "list=") {
+		parts := strings.SplitN(s, "list=", 2)
+		return strings.SplitN(parts[1], "&", 2)[0]
+	}
+	return s
+}
+

@@ -1,6 +1,7 @@
 package session
 
 import (
+	"math"
 	"time"
 )
 
@@ -82,6 +83,8 @@ func (s *State) UpdateTelemetry(t Telemetry) {
 	if t.Status != nil {
 		s.status = *t.Status
 	}
+
+	s.maybeRecordTrackpointLocked(now)
 }
 
 // AddDistanceDelta adds delta distance accumulated from wheel revolutions.
@@ -90,5 +93,51 @@ func (s *State) AddDistanceDelta(deltaMiles float64) {
 	defer s.mu.Unlock()
 	if s.isRunning && deltaMiles > 0 {
 		s.distanceMiles += deltaMiles
+		s.maybeRecordTrackpointLocked(time.Now())
 	}
 }
+
+func (s *State) maybeRecordTrackpointLocked(now time.Time) {
+	if !s.isRunning {
+		return
+	}
+	if !s.lastTrackpointAt.IsZero() && now.Sub(s.lastTrackpointAt) < 2*time.Second {
+		// Enrich recent trackpoint if updated within 500ms window
+		if len(s.trackpoints) > 0 && now.Sub(s.lastTrackpointAt) < 500*time.Millisecond {
+			idx := len(s.trackpoints) - 1
+			if s.hr != nil {
+				s.trackpoints[idx].HR = s.hr
+			}
+			if s.cadence != nil {
+				s.trackpoints[idx].Cadence = int(math.Round(*s.cadence))
+			}
+			if s.speedMPH != nil && *s.speedMPH > 0.5 {
+				sMps := round2(*s.speedMPH * 0.44704)
+				s.trackpoints[idx].SpeedMps = sMps
+				s.trackpoints[idx].Watts = VirtualWatts(*s.speedMPH, s.Knob)
+			}
+			s.trackpoints[idx].DistM = round1(s.distanceMiles * 1609.344)
+		}
+		return
+	}
+	s.lastTrackpointAt = now
+	cad := 0
+	if s.cadence != nil {
+		cad = int(math.Round(*s.cadence))
+	}
+	sMps := 0.0
+	currentWatts := 0
+	if s.speedMPH != nil && *s.speedMPH > 0.5 {
+		sMps = round2(*s.speedMPH * 0.44704)
+		currentWatts = VirtualWatts(*s.speedMPH, s.Knob)
+	}
+	s.trackpoints = append(s.trackpoints, Trackpoint{
+		Time:     now,
+		HR:       s.hr,
+		Cadence:  cad,
+		SpeedMps: sMps,
+		DistM:    round1(s.distanceMiles * 1609.344),
+		Watts:    currentWatts,
+	})
+}
+

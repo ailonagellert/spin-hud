@@ -16,6 +16,8 @@ type SensorManager interface {
 	Scan(d time.Duration)
 }
 
+func newManager() SensorManager { return newBLEManager() }
+
 // ConnectLoop runs the default sensor manager.
 func ConnectLoop(state *session.State) {
 	newManager().ConnectLoop(state)
