@@ -6,3 +6,11 @@ __pycache__/
 img/Thumbs.db
 strava-app.json
 strava-tokens.json
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+.spin_hud_devices.json
+dist/
+build/
+

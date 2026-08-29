@@ -1069,13 +1069,17 @@
           <div class="sensor-tag"><span id="dot-hr" class="sensor-dot"></span> HR</div>
           <div class="sensor-tag"><span id="dot-cad" class="sensor-dot"></span> CAD</div>
           <div class="sensor-tag"><span id="dot-spd" class="sensor-dot"></span> SPD</div>
+          <div class="sensor-tag"><span id="dot-power" class="sensor-dot"></span> <span id="label-pwr-badge">PWR [EST]</span></div>
         </div>
         <div class="clock-pill" id="top-clock">--:--</div>
+        <button id="btn-history" class="btn-icon" title="Ride History & SQLite Logs (H)">📜</button>
+        <button id="btn-import-workout" class="btn-icon" title="Import Workout (.ZWO, .ERG, .MRC, .JSON)">📥</button>
         <button id="btn-layout" class="btn-icon" title="Switch HUD Layout (L): Bottom / Left / Right">⬇️</button>
         <button id="btn-summary" class="btn-icon" title="Workout Summary (S)">📊</button>
         <button id="btn-settings" class="btn-icon" title="Settings">⚙️</button>
         <button id="btn-fs" class="btn-icon" title="Fullscreen (F)">⛶</button>
       </div>
+      <input type="file" id="workout-file-input" style="display:none;" accept=".zwo,.erg,.mrc,.json">
     </div>
 
     <!-- Interval Workout Cue Bar -->
@@ -1175,7 +1179,10 @@
       <!-- Power Meter Pod -->
       <div id="power-card" class="telemetry-card power-card" title="[ tighter   ] looser   1/2/3 = LOW/MED/HARD" onclick="nudgeKnob(true)">
         <div class="card-label">
-          <span>Power</span>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span>Power</span>
+            <span id="badge-power-source" class="zone-pill" style="font-size:10px; padding:1px 6px; background:rgba(245,158,11,0.25); color:#f59e0b; font-weight:800;">EST</span>
+          </div>
           <span style="color:#f59e0b; font-size:16px;">⚡</span>
         </div>
         <div class="card-main">
@@ -1332,9 +1339,58 @@
       <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
         <button id="btn-strava-upload" class="btn-primary" style="background: linear-gradient(135deg, #fc4c02, #e34402); color:#fff;">Post to Strava</button>
         <div id="strava-upload-status" style="font-size:13px;opacity:.85;min-height:1.2em;"></div>
-        <button id="btn-export-tcx" class="btn-primary" style="background: linear-gradient(135deg, #fc4c02, #e34402); color:#fff;">💾 Download Strava / Garmin (.TCX)</button>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+          <button id="btn-export-fit" class="btn-primary" style="background: linear-gradient(135deg, #0ea5e9, #0284c7); color:#fff;">💾 Download .FIT</button>
+          <button id="btn-export-tcx" class="btn-primary" style="background: linear-gradient(135deg, #fc4c02, #e34402); color:#fff;">💾 Download .TCX</button>
+        </div>
         <button id="btn-done-summary" class="btn-primary">Awesome Ride!</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Ride History Modal -->
+  <div id="history-modal" class="modal-backdrop">
+    <div class="modal-box" style="width: 760px; max-width: 95vw; max-height: 85vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h3 class="modal-title">📜 Ride History & SQLite Logs</h3>
+        <button id="btn-close-history" class="btn-icon">✕</button>
+      </div>
+      <div id="history-list-container" style="overflow-y: auto; flex: 1; margin-top: 12px;">
+        <div id="history-loading" style="text-align:center; padding: 24px; color: var(--text-muted);">Loading past rides…</div>
+        <table id="history-table" style="width:100%; border-collapse: collapse; font-size: 13px; display: none;">
+          <thead>
+            <tr style="border-bottom: 1px solid var(--glass-border); text-align: left; color: var(--text-muted); font-size: 11px; text-transform: uppercase;">
+              <th style="padding: 8px;">Date</th>
+              <th style="padding: 8px;">Workout</th>
+              <th style="padding: 8px;">Time</th>
+              <th style="padding: 8px;">Distance</th>
+              <th style="padding: 8px;">Avg Watts</th>
+              <th style="padding: 8px;">Avg HR</th>
+              <th style="padding: 8px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="history-table-body">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- LAN Pairing PIN Modal -->
+  <div id="pin-modal" class="modal-backdrop">
+    <div class="modal-box" style="width: 380px;">
+      <div class="modal-header">
+        <h3 class="modal-title">🔒 LAN Pairing Required</h3>
+        <button id="btn-close-pin" class="btn-icon">✕</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted); margin: 10px 0;">
+        Enter the 6-digit PIN shown on the host computer's terminal to control this workout session.
+      </p>
+      <div class="form-group">
+        <input type="text" id="input-lan-pin" class="form-input" placeholder="e.g. 849201" style="font-size: 20px; text-align: center; letter-spacing: 4px; font-family: 'JetBrains Mono';">
+      </div>
+      <div id="pin-error-msg" style="color: var(--accent-red); font-size: 12px; margin-bottom: 8px; min-height: 1.2em;"></div>
+      <button id="btn-submit-pin" class="btn-primary">Unlock Spin Studio</button>
     </div>
   </div>
 
@@ -2014,10 +2070,36 @@
         const dotHr = document.getElementById('dot-hr');
         const dotCad = document.getElementById('dot-cad');
         const dotSpd = document.getElementById('dot-spd');
+        const dotPower = document.getElementById('dot-power');
+        const pwrBadge = document.getElementById('badge-power-source');
+        const pwrLabelBadge = document.getElementById('label-pwr-badge');
 
         dotHr.classList.toggle('active', !!(d.sensors.hr && d.sensors.hr.connected));
         dotCad.classList.toggle('active', !!(d.sensors.cadence && d.sensors.cadence.connected));
         dotSpd.classList.toggle('active', !!(d.sensors.speed && d.sensors.speed.connected));
+
+        const isPowerConnected = (d.sensors.power && d.sensors.power.connected) || (d.sensors.ftms && d.sensors.ftms.connected);
+        if (dotPower) dotPower.classList.toggle('active', !!isPowerConnected);
+
+        const pSrc = (d.power_source || 'estimated').toUpperCase();
+        if (pwrBadge) {
+          if (pSrc === 'METER') {
+            pwrBadge.textContent = 'METER';
+            pwrBadge.style.background = 'rgba(14,165,233,0.3)';
+            pwrBadge.style.color = '#38bdf8';
+          } else if (pSrc === 'FTMS') {
+            pwrBadge.textContent = 'FTMS';
+            pwrBadge.style.background = 'rgba(168,85,247,0.3)';
+            pwrBadge.style.color = '#c084fc';
+          } else {
+            pwrBadge.textContent = 'EST';
+            pwrBadge.style.background = 'rgba(245,158,11,0.25)';
+            pwrBadge.style.color = '#f59e0b';
+          }
+        }
+        if (pwrLabelBadge) {
+          pwrLabelBadge.textContent = `PWR [${pSrc === 'METER' ? 'METER' : (pSrc === 'FTMS' ? 'FTMS' : 'EST')}]`;
+        }
 
         if (d.sensors.hr) dotHr.parentElement.title = `HR: ${d.sensors.hr.name}`;
         if (d.sensors.cadence) dotCad.parentElement.title = `CAD: ${d.sensors.cadence.name}`;
@@ -2370,6 +2452,136 @@
 
     document.getElementById('btn-layout').onclick = cycleLayout;
     document.getElementById('select-layout').onchange = (e) => setLayout(e.target.value);
+
+    document.getElementById('btn-export-fit').onclick = () => {
+      window.location.href = '/api/workout/export.fit';
+    };
+
+    // History Modal
+    const historyModal = document.getElementById('history-modal');
+    document.getElementById('btn-history').onclick = () => {
+      loadHistory();
+      historyModal.classList.add('open');
+    };
+    document.getElementById('btn-close-history').onclick = () => historyModal.classList.remove('open');
+
+    function loadHistory() {
+      const loading = document.getElementById('history-loading');
+      const table = document.getElementById('history-table');
+      const tbody = document.getElementById('history-table-body');
+      loading.style.display = 'block';
+      table.style.display = 'none';
+      tbody.innerHTML = '';
+      fetch('/api/history')
+        .then(r => r.json())
+        .then(rides => {
+          loading.style.display = 'none';
+          if (!rides || rides.length === 0) {
+            loading.textContent = 'No past rides recorded yet. Complete a workout to auto-save to SQLite!';
+            loading.style.display = 'block';
+            return;
+          }
+          table.style.display = 'table';
+          rides.forEach(r => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid rgba(255,255,255,0.08)';
+            const dt = new Date(r.started_at);
+            const dateStr = dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const mins = Math.floor(r.duration_sec / 60);
+            const secs = r.duration_sec % 60;
+            const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+            const distStr = isImperial ? `${r.distance_mi.toFixed(2)} mi` : `${r.distance_km.toFixed(2)} km`;
+            const wattsStr = r.avg_watts ? `${r.avg_watts} W` : '—';
+            const hrStr = r.avg_hr ? `${r.avg_hr} bpm` : '—';
+            tr.innerHTML = `
+              <td style="padding: 10px 8px; font-family:'JetBrains Mono'; font-size:12px;">${dateStr}</td>
+              <td style="padding: 10px 8px; font-weight:700;">${r.workout_name || 'Spin Ride'}</td>
+              <td style="padding: 10px 8px; font-family:'JetBrains Mono';">${timeStr}</td>
+              <td style="padding: 10px 8px; font-family:'JetBrains Mono';">${distStr}</td>
+              <td style="padding: 10px 8px; font-family:'JetBrains Mono'; color:var(--accent-cyan);">${wattsStr}</td>
+              <td style="padding: 10px 8px; font-family:'JetBrains Mono'; color:var(--accent-red);">${hrStr}</td>
+              <td style="padding: 10px 8px; white-space:nowrap;">
+                <a href="/api/history/${r.id}/export.fit" style="color:var(--accent-cyan); text-decoration:none; margin-right:8px; font-weight:700;">.FIT</a>
+                <button onclick="deleteRide(${r.id})" style="background:none; border:none; color:var(--accent-red); cursor:pointer; font-weight:700;">✕</button>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+        })
+        .catch(() => {
+          loading.textContent = 'Failed to load history.';
+        });
+    }
+
+    window.deleteRide = function(id) {
+      if (!confirm('Delete this ride record?')) return;
+      fetch('/api/history/' + id, { method: 'DELETE' }).then(() => loadHistory());
+    };
+
+    // Workout Importer
+    const fileInput = document.getElementById('workout-file-input');
+    document.getElementById('btn-import-workout').onclick = () => fileInput.click();
+    fileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      fetch('/api/workouts/import', {
+        method: 'POST',
+        body: formData
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.ok && data.workout) {
+          applyImportedWorkout(data.workout);
+        } else {
+          alert('Import failed: ' + ((data && data.error) ? data.error : 'Unknown error'));
+        }
+      })
+      .catch(err => alert('Import error: ' + err));
+      fileInput.value = '';
+    };
+
+    function applyImportedWorkout(w) {
+      if (!w || !w.steps) return;
+      const select = document.getElementById('quick-select-program');
+      const opt = document.createElement('option');
+      opt.value = 'custom_' + (w.id || Date.now());
+      opt.textContent = '📥 ' + w.name;
+      select.appendChild(opt);
+      select.value = opt.value;
+      PROGRAMS[opt.value] = w.steps.map(s => ({
+        name: s.name,
+        duration: s.duration_sec,
+        minRpm: s.cadence_low || s.cadence_target || 70,
+        maxRpm: s.cadence_high || (s.cadence_target ? s.cadence_target + 10 : 90),
+        color: s.color || '#38bdf8',
+        desc: s.cue_message || (s.target_watts ? `${s.target_watts}W Target` : `${Math.round((s.power_low_pct||1)*100)}% FTP`),
+        knob: s.knob || 'med'
+      }));
+      setProgram(opt.value, true);
+    }
+
+    // LAN Pairing PIN Modal
+    const pinModal = document.getElementById('pin-modal');
+    document.getElementById('btn-close-pin').onclick = () => pinModal.classList.remove('open');
+    document.getElementById('btn-submit-pin').onclick = () => {
+      const pin = document.getElementById('input-lan-pin').value.trim();
+      fetch('/api/auth/pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.ok) {
+          pinModal.classList.remove('open');
+          document.getElementById('pin-error-msg').textContent = '';
+        } else {
+          document.getElementById('pin-error-msg').textContent = 'Invalid PIN. Check terminal.';
+        }
+      });
+    };
 
     // Live Clocks
     function updateClock() {

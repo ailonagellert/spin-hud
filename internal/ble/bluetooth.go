@@ -17,17 +17,23 @@ import (
 )
 
 var (
-	hrServiceUUID  = bluetooth.ServiceUUIDHeartRate
-	hrCharUUID     = bluetooth.CharacteristicUUIDHeartRateMeasurement
-	cscServiceUUID = bluetooth.ServiceUUIDCyclingSpeedAndCadence
-	cscCharUUID    = bluetooth.CharacteristicUUIDCSCMeasurement
-	adapter        = bluetooth.DefaultAdapter
+	hrServiceUUID    = bluetooth.ServiceUUIDHeartRate
+	hrCharUUID       = bluetooth.CharacteristicUUIDHeartRateMeasurement
+	cscServiceUUID   = bluetooth.ServiceUUIDCyclingSpeedAndCadence
+	cscCharUUID      = bluetooth.CharacteristicUUIDCSCMeasurement
+	powerServiceUUID = bluetooth.New16BitUUID(0x1818)
+	powerCharUUID    = bluetooth.New16BitUUID(0x2A63)
+	ftmsServiceUUID  = bluetooth.New16BitUUID(0x1826)
+	ftmsCharUUID     = bluetooth.New16BitUUID(0x2AD2)
+	adapter          = bluetooth.DefaultAdapter
 )
 
 type deviceCache struct {
 	HR      string `json:"hr,omitempty"`
 	Cadence string `json:"cadence,omitempty"`
 	Speed   string `json:"speed,omitempty"`
+	Power   string `json:"power,omitempty"`
+	FTMS    string `json:"ftms,omitempty"`
 }
 
 func loadDeviceCache() deviceCache {
@@ -57,15 +63,18 @@ func saveDeviceCache(c deviceCache) {
 }
 
 type bleManager struct {
-	mu         sync.Mutex
-	activeHR   *bluetooth.Device
-	activeCad  *bluetooth.Device
-	activeSpd  *bluetooth.Device
-	connecting map[string]bool
-	cache      deviceCache
+	mu          sync.Mutex
+	activeHR    *bluetooth.Device
+	activeCad   *bluetooth.Device
+	activeSpd   *bluetooth.Device
+	activePower *bluetooth.Device
+	activeFTMS  *bluetooth.Device
+	connecting  map[string]bool
+	cache       deviceCache
 
 	lastCrankNano atomic.Int64
 	lastWheelNano atomic.Int64
+	lastPowerNano atomic.Int64
 }
 
 func newBLEManager() SensorManager {
@@ -149,6 +158,8 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 	cachedHR := m.cache.HR
 	cachedCad := m.cache.Cadence
 	cachedSpd := m.cache.Speed
+	cachedPower := m.cache.Power
+	cachedFTMS := m.cache.FTMS
 	m.mu.Unlock()
 
 	if cachedHR != "" {
@@ -158,12 +169,22 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 	}
 	if cachedCad != "" {
 		if mac, err := bluetooth.ParseMAC(cachedCad); err == nil {
-			go m.connectCad(state, bluetooth.Address{MACAddress: bluetooth.MACAddress{MAC: mac}}, "Cadence 57177 (cached)")
+			go m.connectCad(state, bluetooth.Address{MACAddress: bluetooth.MACAddress{MAC: mac}}, "Cadence (cached)")
 		}
 	}
 	if cachedSpd != "" {
 		if mac, err := bluetooth.ParseMAC(cachedSpd); err == nil {
-			go m.connectSpd(state, bluetooth.Address{MACAddress: bluetooth.MACAddress{MAC: mac}}, "Speed 40452 (cached)")
+			go m.connectSpd(state, bluetooth.Address{MACAddress: bluetooth.MACAddress{MAC: mac}}, "Speed (cached)")
+		}
+	}
+	if cachedPower != "" {
+		if mac, err := bluetooth.ParseMAC(cachedPower); err == nil {
+			go m.connectPower(state, bluetooth.Address{MACAddress: bluetooth.MACAddress{MAC: mac}}, "Power Meter (cached)")
+		}
+	}
+	if cachedFTMS != "" {
+		if mac, err := bluetooth.ParseMAC(cachedFTMS); err == nil {
+			go m.connectFTMS(state, bluetooth.Address{MACAddress: bluetooth.MACAddress{MAC: mac}}, "FTMS Trainer (cached)")
 		}
 	}
 
@@ -176,9 +197,13 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 		activeHR := m.activeHR
 		activeCad := m.activeCad
 		activeSpd := m.activeSpd
+		activePower := m.activePower
+		activeFTMS := m.activeFTMS
 		connectingHR := m.connecting["hr"]
 		connectingCad := m.connecting["cadence"]
 		connectingSpd := m.connecting["speed"]
+		connectingPower := m.connecting["power"]
+		connectingFTMS := m.connecting["ftms"]
 		m.mu.Unlock()
 
 		snap := state.GetSnapshot()
@@ -193,6 +218,11 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 		if activeSpd != nil && lastWheelNano > 0 && now.Sub(time.Unix(0, lastWheelNano)) > 3*time.Second && snap.SpeedMPH != nil && *snap.SpeedMPH > 0 {
 			zero := 0.0
 			state.UpdateTelemetry(session.Telemetry{SpeedMPH: &zero})
+		}
+		lastPowerNano := m.lastPowerNano.Load()
+		if (activePower != nil || activeFTMS != nil) && lastPowerNano > 0 && now.Sub(time.Unix(0, lastPowerNano)) > 3*time.Second && snap.Watts > 0 {
+			zeroW := 0
+			state.UpdateTelemetry(session.Telemetry{PowerWatts: &zeroW})
 		}
 
 		// Check disconnects
@@ -229,11 +259,34 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 				activeSpd = nil
 			}
 		}
+		if activePower != nil {
+			if connected, err := activePower.Connected(); err != nil || !connected {
+				_ = activePower.Disconnect()
+				m.mu.Lock()
+				m.activePower = nil
+				m.mu.Unlock()
+				state.SetSensor("power", false, "Disconnected")
+				state.UpdateTelemetry(session.Telemetry{PowerWatts: nil})
+				activePower = nil
+			}
+		}
+		if activeFTMS != nil {
+			if connected, err := activeFTMS.Connected(); err != nil || !connected {
+				_ = activeFTMS.Disconnect()
+				m.mu.Lock()
+				m.activeFTMS = nil
+				m.mu.Unlock()
+				state.SetSensor("ftms", false, "Disconnected")
+				state.UpdateTelemetry(session.Telemetry{PowerWatts: nil})
+				activeFTMS = nil
+			}
+		}
+
 
 		needHR := (activeHR == nil) && !connectingHR
 		needCad := (activeCad == nil) && !connectingCad
 		needSpd := (activeSpd == nil) && !connectingSpd
-		anyConnecting := connectingHR || connectingCad || connectingSpd
+		anyConnecting := connectingHR || connectingCad || connectingSpd || connectingPower || connectingFTMS
 
 		if !needHR && !needCad && !needSpd && !anyConnecting {
 			status := "All sensors live"
@@ -590,3 +643,147 @@ func (m *bleManager) connectSpd(state *session.State, addr bluetooth.Address, la
 	state.SetSensor("speed", true, label)
 	log.Printf("BLE: Connected Speed: %s (%s)", label, addr.String())
 }
+
+func (m *bleManager) connectPower(state *session.State, addr bluetooth.Address, label string) {
+	m.mu.Lock()
+	if m.connecting["power"] {
+		m.mu.Unlock()
+		return
+	}
+	m.connecting["power"] = true
+	m.mu.Unlock()
+
+	defer func() {
+		m.mu.Lock()
+		delete(m.connecting, "power")
+		m.mu.Unlock()
+	}()
+
+	state.SetSensor("power", false, fmt.Sprintf("Connecting %s…", label))
+
+	dev, err := adapter.Connect(addr, bluetooth.ConnectionParams{})
+	if err != nil {
+		state.SetSensor("power", false, fmt.Sprintf("Drop: %v", err))
+		return
+	}
+
+	svcs, err := dev.DiscoverServices([]bluetooth.UUID{powerServiceUUID})
+	if err != nil || len(svcs) == 0 {
+		_ = dev.Disconnect()
+		state.SetSensor("power", false, "Power Service not found")
+		return
+	}
+
+	chars, err := svcs[0].DiscoverCharacteristics([]bluetooth.UUID{powerCharUUID})
+	if err != nil || len(chars) == 0 {
+		_ = dev.Disconnect()
+		state.SetSensor("power", false, "Power Characteristic not found")
+		return
+	}
+
+	err = chars[0].EnableNotifications(func(buf []byte) {
+		watts, ok := ParseCyclingPower(buf)
+		if ok {
+			m.lastPowerNano.Store(time.Now().UnixNano())
+			pSrc := "meter"
+			state.UpdateTelemetry(session.Telemetry{
+				PowerWatts:  &watts,
+				PowerSource: &pSrc,
+			})
+		}
+	})
+	if err != nil {
+		_ = dev.Disconnect()
+		state.SetSensor("power", false, fmt.Sprintf("Notify error: %v", err))
+		return
+	}
+
+	m.mu.Lock()
+	m.activePower = &dev
+	m.cache.Power = addr.String()
+	saveDeviceCache(m.cache)
+	m.mu.Unlock()
+
+	state.SetSensor("power", true, label)
+	log.Printf("BLE: Connected Power Meter: %s (%s)", label, addr.String())
+}
+
+func (m *bleManager) connectFTMS(state *session.State, addr bluetooth.Address, label string) {
+	m.mu.Lock()
+	if m.connecting["ftms"] {
+		m.mu.Unlock()
+		return
+	}
+	m.connecting["ftms"] = true
+	m.mu.Unlock()
+
+	defer func() {
+		m.mu.Lock()
+		delete(m.connecting, "ftms")
+		m.mu.Unlock()
+	}()
+
+	state.SetSensor("ftms", false, fmt.Sprintf("Connecting %s…", label))
+
+	dev, err := adapter.Connect(addr, bluetooth.ConnectionParams{})
+	if err != nil {
+		state.SetSensor("ftms", false, fmt.Sprintf("Drop: %v", err))
+		return
+	}
+
+	svcs, err := dev.DiscoverServices([]bluetooth.UUID{ftmsServiceUUID})
+	if err != nil || len(svcs) == 0 {
+		_ = dev.Disconnect()
+		state.SetSensor("ftms", false, "FTMS Service not found")
+		return
+	}
+
+	chars, err := svcs[0].DiscoverCharacteristics([]bluetooth.UUID{ftmsCharUUID})
+	if err != nil || len(chars) == 0 {
+		_ = dev.Disconnect()
+		state.SetSensor("ftms", false, "FTMS Characteristic not found")
+		return
+	}
+
+	err = chars[0].EnableNotifications(func(buf []byte) {
+		data, ok := ParseFTMSIndoorBike(buf)
+		if ok {
+			now := time.Now().UnixNano()
+			pSrc := "ftms"
+			t := session.Telemetry{
+				PowerSource: &pSrc,
+			}
+			if data.PowerWatts != nil {
+				m.lastPowerNano.Store(now)
+				t.PowerWatts = data.PowerWatts
+			}
+			if data.CadenceRPM != nil {
+				m.lastCrankNano.Store(now)
+				t.Cadence = data.CadenceRPM
+			}
+			if data.SpeedMPH != nil {
+				m.lastWheelNano.Store(now)
+				t.SpeedMPH = data.SpeedMPH
+			}
+			if data.HeartRate != nil {
+				t.HR = data.HeartRate
+			}
+			state.UpdateTelemetry(t)
+		}
+	})
+	if err != nil {
+		_ = dev.Disconnect()
+		state.SetSensor("ftms", false, fmt.Sprintf("Notify error: %v", err))
+		return
+	}
+
+	m.mu.Lock()
+	m.activeFTMS = &dev
+	m.cache.FTMS = addr.String()
+	saveDeviceCache(m.cache)
+	m.mu.Unlock()
+
+	state.SetSensor("ftms", true, label)
+	log.Printf("BLE: Connected FTMS Trainer: %s (%s)", label, addr.String())
+}
+

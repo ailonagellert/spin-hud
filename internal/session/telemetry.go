@@ -12,6 +12,8 @@ type Telemetry struct {
 	Cadence       *float64
 	SpeedMPH      *float64
 	DistanceMiles *float64
+	PowerWatts    *int
+	PowerSource   *string
 	Status        *string
 }
 
@@ -21,6 +23,10 @@ func (s *State) UpdateTelemetry(t Telemetry) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()
+
+	if t.PowerSource != nil {
+		s.powerSource = *t.PowerSource
+	}
 
 	// Heart Rate update
 	if t.HR != nil {
@@ -56,6 +62,19 @@ func (s *State) UpdateTelemetry(t Telemetry) {
 		}
 	}
 
+	// Direct Power update (BLE power meter or FTMS)
+	if t.PowerWatts != nil {
+		w := *t.PowerWatts
+		s.powerWatts = &w
+		if s.isRunning && w >= 0 {
+			s.wattsSum += float64(w)
+			s.wattsCount++
+			if w > s.maxWatts {
+				s.maxWatts = w
+			}
+		}
+	}
+
 	// Speed update & virtual power accumulation
 	if t.SpeedMPH != nil {
 		newSpd := *t.SpeedMPH
@@ -66,11 +85,14 @@ func (s *State) UpdateTelemetry(t Telemetry) {
 			if newSpd > s.maxSpdMPH {
 				s.maxSpdMPH = newSpd
 			}
-			w := VirtualWatts(newSpd, s.Knob)
-			s.wattsSum += float64(w)
-			s.wattsCount++
-			if w > s.maxWatts {
-				s.maxWatts = w
+			// Accumulate virtual power only if real meter is not active
+			if s.powerSource == "estimated" || s.powerWatts == nil {
+				w := VirtualWatts(newSpd, s.Knob)
+				s.wattsSum += float64(w)
+				s.wattsCount++
+				if w > s.maxWatts {
+					s.maxWatts = w
+				}
 			}
 		}
 	}
@@ -101,7 +123,7 @@ func (s *State) maybeRecordTrackpointLocked(now time.Time) {
 	if !s.isRunning {
 		return
 	}
-	if !s.lastTrackpointAt.IsZero() && now.Sub(s.lastTrackpointAt) < 2*time.Second {
+	if !s.lastTrackpointAt.IsZero() && now.Sub(s.lastTrackpointAt) < 1*time.Second {
 		// Enrich recent trackpoint if updated within 500ms window
 		if len(s.trackpoints) > 0 && now.Sub(s.lastTrackpointAt) < 500*time.Millisecond {
 			idx := len(s.trackpoints) - 1
@@ -111,10 +133,14 @@ func (s *State) maybeRecordTrackpointLocked(now time.Time) {
 			if s.cadence != nil {
 				s.trackpoints[idx].Cadence = int(math.Round(*s.cadence))
 			}
+			if s.powerWatts != nil && s.powerSource != "estimated" {
+				s.trackpoints[idx].Watts = *s.powerWatts
+			} else if s.speedMPH != nil && *s.speedMPH > 0.5 {
+				s.trackpoints[idx].Watts = VirtualWatts(*s.speedMPH, s.Knob)
+			}
 			if s.speedMPH != nil && *s.speedMPH > 0.5 {
 				sMps := round2(*s.speedMPH * 0.44704)
 				s.trackpoints[idx].SpeedMps = sMps
-				s.trackpoints[idx].Watts = VirtualWatts(*s.speedMPH, s.Knob)
 			}
 			s.trackpoints[idx].DistM = round1(s.distanceMiles * 1609.344)
 		}
@@ -127,9 +153,13 @@ func (s *State) maybeRecordTrackpointLocked(now time.Time) {
 	}
 	sMps := 0.0
 	currentWatts := 0
+	if s.powerWatts != nil && s.powerSource != "estimated" {
+		currentWatts = *s.powerWatts
+	} else if s.speedMPH != nil && *s.speedMPH > 0.5 {
+		currentWatts = VirtualWatts(*s.speedMPH, s.Knob)
+	}
 	if s.speedMPH != nil && *s.speedMPH > 0.5 {
 		sMps = round2(*s.speedMPH * 0.44704)
-		currentWatts = VirtualWatts(*s.speedMPH, s.Knob)
 	}
 	s.trackpoints = append(s.trackpoints, Trackpoint{
 		Time:     now,
@@ -140,4 +170,5 @@ func (s *State) maybeRecordTrackpointLocked(now time.Time) {
 		Watts:    currentWatts,
 	})
 }
+
 

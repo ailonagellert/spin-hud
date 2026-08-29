@@ -108,3 +108,123 @@ func ParseCSCWheel(data []byte, prev *CSCRef, wheelCircM float64) (speedMPH floa
 
 	return mph, deltaMi, ref
 }
+
+// ParseCyclingPower parses instantaneous power (Watts) from BLE Cycling Power Measurement (0x2A63).
+func ParseCyclingPower(data []byte) (int, bool) {
+	if len(data) < 4 {
+		return 0, false
+	}
+	rawPower := int16(binary.LittleEndian.Uint16(data[2:4]))
+	if rawPower < 0 {
+		return 0, true
+	}
+	if rawPower > 3000 { // Plausibility clamp (> 3000 W)
+		return 0, true
+	}
+	return int(rawPower), true
+}
+
+// FTMSData contains parsed metrics from FTMS Indoor Bike Data (0x2AD2).
+type FTMSData struct {
+	SpeedMPH   *float64
+	CadenceRPM *float64
+	PowerWatts *int
+	HeartRate  *int
+}
+
+// ParseFTMSIndoorBike parses metrics from BLE FTMS Indoor Bike Data (0x2AD2).
+func ParseFTMSIndoorBike(data []byte) (FTMSData, bool) {
+	if len(data) < 2 {
+		return FTMSData{}, false
+	}
+	flags := binary.LittleEndian.Uint16(data[0:2])
+	offset := 2
+	var res FTMSData
+
+	// Bit 0: More Data (0 = Instantaneous Speed present)
+	if flags&0x0001 == 0 {
+		if len(data) < offset+2 {
+			return res, false
+		}
+		rawSpd := binary.LittleEndian.Uint16(data[offset : offset+2])
+		offset += 2
+		spdKmh := float64(rawSpd) * 0.01
+		spdMph := spdKmh / 1.609344
+		if spdMph <= 120.0 {
+			res.SpeedMPH = &spdMph
+		}
+	}
+
+	// Bit 1: Average Speed Present
+	if flags&0x0002 != 0 {
+		offset += 2
+	}
+
+	// Bit 2: Instantaneous Cadence Present (0.5 RPM)
+	if flags&0x0004 != 0 {
+		if len(data) < offset+2 {
+			return res, false
+		}
+		rawCad := binary.LittleEndian.Uint16(data[offset : offset+2])
+		offset += 2
+		cadRpm := float64(rawCad) * 0.5
+		if cadRpm <= 250.0 {
+			res.CadenceRPM = &cadRpm
+		}
+	}
+
+	// Bit 3: Average Cadence Present
+	if flags&0x0008 != 0 {
+		offset += 2
+	}
+
+	// Bit 4: Total Distance Present (uint24)
+	if flags&0x0010 != 0 {
+		offset += 3
+	}
+
+	// Bit 5: Resistance Level Present
+	if flags&0x0020 != 0 {
+		offset += 2
+	}
+
+	// Bit 6: Instantaneous Power Present (sint16 in Watts)
+	if flags&0x0040 != 0 {
+		if len(data) < offset+2 {
+			return res, false
+		}
+		rawWatts := int16(binary.LittleEndian.Uint16(data[offset : offset+2]))
+		offset += 2
+		w := int(rawWatts)
+		if w < 0 {
+			w = 0
+		} else if w > 3000 {
+			w = 0
+		}
+		res.PowerWatts = &w
+	}
+
+	// Bit 7: Average Power Present
+	if flags&0x0080 != 0 {
+		offset += 2
+	}
+
+	// Bit 8: Expended Energy Present (5 bytes)
+	if flags&0x0100 != 0 {
+		offset += 5
+	}
+
+	// Bit 9: Heart Rate Present (uint8)
+	if flags&0x0200 != 0 {
+		if len(data) >= offset+1 {
+			hr := int(data[offset])
+			offset += 1
+			if hr > 0 && hr <= 250 {
+				res.HeartRate = &hr
+			}
+		}
+	}
+
+	return res, true
+}
+

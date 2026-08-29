@@ -164,3 +164,52 @@ func TestSelfCheck(t *testing.T) {
 		t.Fatal("self-check failed")
 	}
 }
+
+func TestParseCyclingPower(t *testing.T) {
+	// Standard 250W power packet (flags=0x0000, instantaneous_power=250)
+	packet := []byte{0x00, 0x00, 0xFA, 0x00}
+	watts, ok := ParseCyclingPower(packet)
+	if !ok || watts != 250 {
+		t.Fatalf("expected 250W, got %d (ok=%v)", watts, ok)
+	}
+
+	// Clamp negative / invalid
+	badPacket := []byte{0x00, 0x00, 0xFF, 0x7F} // 32767W > 3000W
+	watts, ok = ParseCyclingPower(badPacket)
+	if !ok || watts != 0 {
+		t.Fatalf("expected 0W clamp on extreme power, got %d", watts)
+	}
+
+	// Short packet
+	if _, ok := ParseCyclingPower([]byte{0x00, 0x00}); ok {
+		t.Fatal("short packet should return ok=false")
+	}
+}
+
+func TestParseFTMSIndoorBike(t *testing.T) {
+	// Flags: Speed present (bit 0 = 0), Cadence present (bit 2 = 1 -> 0x0004), Power present (bit 6 = 1 -> 0x0040)
+	// Flags = 0x0044
+	// Speed = 2500 (25.00 km/h -> 15.534 mph)
+	// Cadence = 180 (90.0 RPM)
+	// Power = 220 Watts
+	packet := []byte{
+		0x44, 0x00, // Flags
+		0xC4, 0x09, // Speed: 2500 (0x09C4)
+		0xB4, 0x00, // Cadence: 180 (0x00B4) -> 90.0 RPM
+		0xDC, 0x00, // Power: 220 (0x00DC) -> 220 Watts
+	}
+	data, ok := ParseFTMSIndoorBike(packet)
+	if !ok {
+		t.Fatal("FTMS parse failed")
+	}
+	if data.SpeedMPH == nil || *data.SpeedMPH < 15.5 || *data.SpeedMPH > 15.6 {
+		t.Fatalf("unexpected speed: %v", data.SpeedMPH)
+	}
+	if data.CadenceRPM == nil || *data.CadenceRPM != 90.0 {
+		t.Fatalf("unexpected cadence: %v", data.CadenceRPM)
+	}
+	if data.PowerWatts == nil || *data.PowerWatts != 220 {
+		t.Fatalf("unexpected power: %v", data.PowerWatts)
+	}
+}
+

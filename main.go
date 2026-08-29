@@ -1,11 +1,13 @@
 package main
 
 import (
+	"crypto/rand"
 	"embed"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -16,6 +18,7 @@ import (
 	"time"
 
 	"spin-hud/internal/ble"
+	"spin-hud/internal/db"
 	"spin-hud/internal/server"
 	"spin-hud/internal/session"
 	"spin-hud/internal/strava"
@@ -23,6 +26,29 @@ import (
 
 //go:embed web/index.html
 var webFS embed.FS
+
+func generatePIN() string {
+	n, err := rand.Int(rand.Reader, big.NewInt(900000))
+	if err != nil {
+		return "849201"
+	}
+	return fmt.Sprintf("%06d", n.Int64()+100000)
+}
+
+func getLocalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "localhost"
+	}
+	for _, addr := range addrs {
+		if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
+			if ipNet.IP.To4() != nil {
+				return ipNet.IP.String()
+			}
+		}
+	}
+	return "localhost"
+}
 
 func openBrowser(url string) {
 	var cmd *exec.Cmd
@@ -44,6 +70,8 @@ func main() {
 	selfCheck := flag.Bool("self-check", false, "Run parser & engine validation")
 	port := flag.Int("port", 8080, "Web server port (default: 8080)")
 	lan := flag.Bool("lan", false, "Listen on 0.0.0.0 for LAN access (default: 127.0.0.1)")
+	pinFlag := flag.String("pin", "", "Custom LAN pairing PIN (auto-generated if --lan enabled)")
+	dbPath := flag.String("db", "", "Path to SQLite database file")
 	playlist := flag.String("playlist", session.DefaultPlaylistID, "YouTube Playlist ID or URL")
 	noBrowser := flag.Bool("no-browser", false, "Do not automatically open browser")
 	flag.Parse()
@@ -63,8 +91,14 @@ func main() {
 
 	pl := session.ExtractPlaylistID(*playlist)
 	host := "127.0.0.1"
+	lanPIN := ""
 	if *lan {
 		host = "0.0.0.0"
+		if *pinFlag != "" {
+			lanPIN = *pinFlag
+		} else {
+			lanPIN = generatePIN()
+		}
 	}
 
 	state := session.NewState(pl)
@@ -78,12 +112,24 @@ func main() {
 	if exeErr == nil {
 		base = filepath.Dir(exePath)
 	}
+
+	resolvedDBPath := *dbPath
+	if resolvedDBPath == "" {
+		resolvedDBPath = filepath.Join(base, "spin_hud.db")
+	}
+	database, err := db.Open(resolvedDBPath)
+	if err != nil {
+		log.Printf("warning: sqlite persistence unavailable: %v", err)
+	} else {
+		defer database.Close()
+	}
+
 	sc := strava.New(
 		filepath.Join(base, "strava-app.json"),
 		filepath.Join(base, "strava-tokens.json"),
 		fmt.Sprintf("http://localhost:%d/api/strava/callback", *port),
 	)
-	srv := server.New(state, string(indexHTML), sc)
+	srv := server.New(state, string(indexHTML), sc, database, lanPIN)
 
 	listener, err := server.Listen(host, *port)
 	if err != nil {
@@ -102,20 +148,26 @@ func main() {
 	}
 
 	displayHost := "localhost"
-	if host != "127.0.0.1" && host != "0.0.0.0" {
+	if host == "0.0.0.0" {
+		displayHost = getLocalIP()
+	} else if host != "127.0.0.1" {
 		displayHost = host
 	}
 	url := fmt.Sprintf("http://%s:%d", displayHost, *port)
 	fmt.Println("========================================================")
 	fmt.Printf("  SPIN STUDIO LIVE: %s\n", url)
+	if *lan {
+		fmt.Printf("  LAN Pairing PIN : %s\n", lanPIN)
+	}
 	fmt.Printf("  Playlist: https://youtube.com/playlist?list=%s\n", state.PlaylistID)
-	fmt.Println("  Sensors : Garmin 965 (HR) + Magene (Cadence & Speed)")
+	fmt.Println("  Sensors : Garmin 965 (HR) + Magene + Power / FTMS")
+	fmt.Println("  Storage : SQLite History & FIT / TCX Export Enabled")
 	fmt.Println("========================================================")
 
 	if !*noBrowser {
 		go func() {
 			time.Sleep(1 * time.Second)
-			openBrowser(url)
+			openBrowser(fmt.Sprintf("http://localhost:%d", *port))
 		}()
 	}
 

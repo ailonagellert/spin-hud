@@ -17,6 +17,8 @@ type SensorsSnapshot struct {
 	HR      SensorState `json:"hr"`
 	Cadence SensorState `json:"cadence"`
 	Speed   SensorState `json:"speed"`
+	Power   SensorState `json:"power"`
+	FTMS    SensorState `json:"ftms"`
 }
 
 // Snapshot is the exact JSON shape served on /api/telemetry (SSE).
@@ -41,6 +43,7 @@ type Snapshot struct {
 	Watts         int            `json:"watts"`
 	AvgWatts      *int           `json:"avg_watts"`
 	MaxWatts      *int           `json:"max_watts"`
+	PowerSource   string         `json:"power_source"`
 	WKg           float64        `json:"w_kg"`
 	AvgWKg        *float64       `json:"avg_w_kg"`
 	DistanceMi    float64        `json:"distance_mi"`
@@ -51,11 +54,13 @@ type Snapshot struct {
 	Sensors       SensorsSnapshot `json:"sensors"`
 	Status        string         `json:"status"`
 	PlaylistID    string         `json:"playlist_id"`
+	WorkoutName   string         `json:"workout_name,omitempty"`
 	RiderWeightKg float64        `json:"rider_weight_kg"`
 	Knob          string         `json:"knob"`
 	KnobLabel     string         `json:"knob_label"`
 	KnobTurns     float64        `json:"knob_turns"`
 }
+
 
 // Trackpoint is a periodic sample recorded for TCX export (every 2s while running).
 type Trackpoint struct {
@@ -160,12 +165,15 @@ type State struct {
 	MaxHR         int
 	RiderWeightKg float64
 	Knob          string
+	WorkoutName   string
 
-	hr       *int
-	cadence  *float64
-	speedMPH *float64
-	sensors  SensorsSnapshot
-	status   string
+	hr          *int
+	cadence     *float64
+	speedMPH    *float64
+	powerWatts  *int
+	powerSource string
+	sensors     SensorsSnapshot
+	status      string
 
 	hrSum      float64
 	hrCount    int
@@ -190,6 +198,7 @@ type State struct {
 	pausedDuration   time.Duration
 	lastPauseTime    time.Time
 	workoutStartWall time.Time
+	workoutEndWall   time.Time
 
 	trackpoints      []Trackpoint
 	lastTrackpointAt time.Time
@@ -203,10 +212,14 @@ func NewState(playlistID string) *State {
 		MaxHR:         DefaultMaxHR,
 		RiderWeightKg: DefaultRiderWeightKg,
 		Knob:          KnobLow,
+		powerSource:   "estimated",
+		WorkoutName:   "Open Spin Session",
 		sensors: SensorsSnapshot{
 			HR:      SensorState{Name: "Searching…"},
 			Cadence: SensorState{Name: "Searching…"},
 			Speed:   SensorState{Name: "Searching…"},
+			Power:   SensorState{Name: "Searching…"},
+			FTMS:    SensorState{Name: "Searching…"},
 		},
 		status:           "Initializing sensors…",
 		startedAt:        now,
@@ -224,6 +237,7 @@ func (s *State) ResetWorkout() {
 	now := time.Now()
 	s.startedAt = now
 	s.workoutStartWall = now
+	s.workoutEndWall = time.Time{}
 	s.pausedDuration = 0
 	s.lastPauseTime = time.Time{}
 	s.isRunning = true
@@ -251,6 +265,7 @@ func (s *State) ToggleWorkoutTimer() bool {
 	if s.isRunning {
 		s.isRunning = false
 		s.lastPauseTime = now
+		s.workoutEndWall = now
 	} else {
 		s.isRunning = true
 		if !s.lastPauseTime.IsZero() {
@@ -259,6 +274,29 @@ func (s *State) ToggleWorkoutTimer() bool {
 		s.lastCalTime = now
 	}
 	return s.isRunning
+}
+
+func (s *State) SetWorkoutName(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.WorkoutName = name
+}
+
+func (s *State) WorkoutEndWall() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.workoutEndWall.IsZero() {
+		return time.Now()
+	}
+	return s.workoutEndWall
+}
+
+func (s *State) GetTrackpoints() []Trackpoint {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	pts := make([]Trackpoint, len(s.trackpoints))
+	copy(pts, s.trackpoints)
+	return pts
 }
 
 func (s *State) SetKnob(knob string) {
@@ -292,6 +330,20 @@ func (s *State) SetSensor(kind string, connected bool, name string) {
 		s.sensors.Cadence = st
 	case "speed":
 		s.sensors.Speed = st
+	case "power":
+		s.sensors.Power = st
+		if connected {
+			s.powerSource = "meter"
+		} else if !s.sensors.FTMS.Connected {
+			s.powerSource = "estimated"
+		}
+	case "ftms":
+		s.sensors.FTMS = st
+		if connected {
+			s.powerSource = "ftms"
+		} else if !s.sensors.Power.Connected {
+			s.powerSource = "estimated"
+		}
 	}
 }
 
@@ -355,9 +407,15 @@ func (s *State) GetSnapshot() Snapshot {
 	}
 	distKM := round2(s.distanceMiles * 1.60934)
 
-	// Virtual power: fluid curve at LOW, times pad-brake stop
+	// Power: use real meter watts if available, otherwise virtual power
 	currentWatts := 0
-	if speedMPH != nil && *speedMPH > 0.5 {
+	pSource := s.powerSource
+	if pSource == "" {
+		pSource = "estimated"
+	}
+	if pSource != "estimated" && s.powerWatts != nil {
+		currentWatts = *s.powerWatts
+	} else if speedMPH != nil && *speedMPH > 0.5 {
 		currentWatts = VirtualWatts(*speedMPH, s.Knob)
 	}
 
@@ -426,6 +484,7 @@ func (s *State) GetSnapshot() Snapshot {
 		Watts:         currentWatts,
 		AvgWatts:      avgWatts,
 		MaxWatts:      maxWattsOut,
+		PowerSource:   pSource,
 		WKg:           wKg,
 		AvgWKg:        avgWKg,
 		DistanceMi:    round2(s.distanceMiles),
@@ -436,6 +495,7 @@ func (s *State) GetSnapshot() Snapshot {
 		Sensors:       s.sensors,
 		Status:        s.status,
 		PlaylistID:    s.PlaylistID,
+		WorkoutName:   s.WorkoutName,
 		RiderWeightKg: s.RiderWeightKg,
 		Knob:          s.Knob,
 		KnobLabel:     KnobLabelOf(s.Knob),
