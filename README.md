@@ -34,7 +34,7 @@ For in-depth guides on setup, hardware, training metrics, and developer integrat
 | 🛠️ [**Hardware & Sensors Guide**](docs/HARDWARE_AND_SENSORS.md) | Pairing Garmin 965 HR, Magene S3+ Cadence/Speed, Power Meters, FTMS Trainers, and flywheel calibration |
 | 🚴 [**Workouts & File Importer**](docs/WORKOUTS_AND_IMPORTING.md) | Video-matched profiles, interval coaching cues, and importing `.zwo` (Zwift), `.mrc`, `.erg`, and JSON files |
 | 📱 [**LAN & Remote Control**](docs/LAN_REMOTE_CONTROL.md) | Multi-device setups (tablets/phones/TVs), `--lan` mode, 6-digit PIN pairing security, and auto-401 authentication |
-| 📊 [**Metrics, History & Exports**](docs/METRICS_AND_EXPORTS.md) | Real-time NP, TSS, Intensity Factor, HR/Power zones, Garmin `.FIT` / `.TCX` downloads, and Strava integration |
+| 📊 [**Metrics, History & Exports**](docs/METRICS_AND_EXPORTS.md) | HR zones, virtual vs. real power (W/kg), ride history in SQLite, Garmin `.FIT` / `.TCX` downloads, and Strava upload |
 | 📡 [**REST & SSE API Reference**](docs/API_REFERENCE.md) | Complete HTTP and 5 Hz Server-Sent Events API reference for developers and automation |
 
 ---
