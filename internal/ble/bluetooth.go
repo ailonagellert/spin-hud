@@ -289,7 +289,7 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 		needFTMS := (activeFTMS == nil) && !connectingFTMS
 		anyConnecting := connectingHR || connectingCad || connectingSpd || connectingPower || connectingFTMS
 
-		if !needHR && !needCad && !needSpd && !anyConnecting {
+		if !needHR && !needCad && !needSpd && !needPower && !needFTMS && !anyConnecting {
 			status := "All sensors live"
 			state.UpdateTelemetry(session.Telemetry{Status: &status})
 			time.Sleep(1500 * time.Millisecond)
@@ -305,6 +305,12 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 		}
 		if needSpd {
 			missing = append(missing, "Speed (40452)")
+		}
+		if needPower {
+			missing = append(missing, "Power meter")
+		}
+		if needFTMS {
+			missing = append(missing, "FTMS trainer")
 		}
 		if len(missing) > 0 {
 			status := fmt.Sprintf("Searching: %s… (spin pedals/wheel)", strings.Join(missing, ", "))
