@@ -55,4 +55,10 @@ func TestEncodeActivity(t *testing.T) {
 	if calcCRC != gotCRC {
 		t.Fatalf("CRC mismatch: calculated %04X vs in-file %04X", calcCRC, gotCRC)
 	}
+
+	// Verify Record Definition (Global Msg 20) contains field 5 for distance (0x05, 0x04, 0x86)
+	expectedRecordField5 := []byte{0x05, 0x04, 0x86}
+	if !bytes.Contains(buf, expectedRecordField5) {
+		t.Fatalf("FIT payload missing Record distance field 5 definition (0x05, 0x04, 0x86)")
+	}
 }

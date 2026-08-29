@@ -33,8 +33,9 @@ type Server struct {
 	DB        *db.DB
 	LANPIN    string
 
-	hubMu       sync.Mutex
-	subscribers map[chan []byte]struct{}
+	hubMu          sync.Mutex
+	subscribers    map[chan []byte]struct{}
+	lastSavedStart time.Time
 }
 
 // New builds the HTTP handler set; indexHTML is the embedded UI.
@@ -330,6 +331,14 @@ func (s *Server) autoSaveCurrentRide() {
 		return // ignore accidental momentary restarts
 	}
 	start := s.State.WorkoutStartWall()
+	s.hubMu.Lock()
+	if !s.lastSavedStart.IsZero() && s.lastSavedStart.Equal(start) {
+		s.hubMu.Unlock()
+		return
+	}
+	s.lastSavedStart = start
+	s.hubMu.Unlock()
+
 	end := s.State.WorkoutEndWall()
 	pts := s.State.GetTrackpoints()
 	name := snap.WorkoutName
@@ -356,9 +365,6 @@ func (s *Server) handleToggle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	running := s.State.ToggleWorkoutTimer()
-	if !running {
-		s.autoSaveCurrentRide()
-	}
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprintf(w, `{"running":%t}`, running)
 }

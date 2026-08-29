@@ -326,23 +326,38 @@ func (s *State) SetSensor(kind string, connected bool, name string) {
 	switch kind {
 	case "hr":
 		s.sensors.HR = st
+		if !connected {
+			s.hr = nil
+		}
 	case "cadence":
 		s.sensors.Cadence = st
+		if !connected {
+			s.cadence = nil
+		}
 	case "speed":
 		s.sensors.Speed = st
+		if !connected {
+			s.speedMPH = nil
+		}
 	case "power":
 		s.sensors.Power = st
 		if connected {
 			s.powerSource = "meter"
-		} else if !s.sensors.FTMS.Connected {
-			s.powerSource = "estimated"
+		} else {
+			s.powerWatts = nil
+			if !s.sensors.FTMS.Connected {
+				s.powerSource = "estimated"
+			}
 		}
 	case "ftms":
 		s.sensors.FTMS = st
 		if connected {
 			s.powerSource = "ftms"
-		} else if !s.sensors.Power.Connected {
-			s.powerSource = "estimated"
+		} else {
+			if !s.sensors.Power.Connected {
+				s.powerWatts = nil
+				s.powerSource = "estimated"
+			}
 		}
 	}
 }

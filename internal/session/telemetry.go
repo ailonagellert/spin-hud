@@ -6,13 +6,17 @@ import (
 )
 
 // Telemetry is the input bundle for UpdateTelemetry (mirrors Python kwargs).
-// Only non-nil fields are applied.
+// Only non-nil fields are applied, unless explicit Clear* flags are set.
 type Telemetry struct {
 	HR            *int
+	ClearHR       bool
 	Cadence       *float64
+	ClearCadence  bool
 	SpeedMPH      *float64
+	ClearSpeed    bool
 	DistanceMiles *float64
 	PowerWatts    *int
+	ClearPower    bool
 	PowerSource   *string
 	Status        *string
 }
@@ -29,7 +33,9 @@ func (s *State) UpdateTelemetry(t Telemetry) {
 	}
 
 	// Heart Rate update
-	if t.HR != nil {
+	if t.ClearHR {
+		s.hr = nil
+	} else if t.HR != nil {
 		newHR := *t.HR
 		s.hr = &newHR
 		if s.isRunning && newHR > 0 {
@@ -50,7 +56,9 @@ func (s *State) UpdateTelemetry(t Telemetry) {
 	}
 
 	// Cadence update
-	if t.Cadence != nil {
+	if t.ClearCadence {
+		s.cadence = nil
+	} else if t.Cadence != nil {
 		newCad := *t.Cadence
 		s.cadence = &newCad
 		if s.isRunning && newCad > 0 {
@@ -63,7 +71,9 @@ func (s *State) UpdateTelemetry(t Telemetry) {
 	}
 
 	// Direct Power update (BLE power meter or FTMS)
-	if t.PowerWatts != nil {
+	if t.ClearPower {
+		s.powerWatts = nil
+	} else if t.PowerWatts != nil {
 		w := *t.PowerWatts
 		s.powerWatts = &w
 		if s.isRunning && w >= 0 {
@@ -76,7 +86,9 @@ func (s *State) UpdateTelemetry(t Telemetry) {
 	}
 
 	// Speed update & virtual power accumulation
-	if t.SpeedMPH != nil {
+	if t.ClearSpeed {
+		s.speedMPH = nil
+	} else if t.SpeedMPH != nil {
 		newSpd := *t.SpeedMPH
 		s.speedMPH = &newSpd
 		if s.isRunning && newSpd > 0.5 {

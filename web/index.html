@@ -1073,6 +1073,7 @@
         </div>
         <div class="clock-pill" id="top-clock">--:--</div>
         <button id="btn-history" class="btn-icon" title="Ride History & SQLite Logs (H)">📜</button>
+        <button id="btn-pin" class="btn-icon" title="Pair Remote / LAN PIN">🔒</button>
         <button id="btn-import-workout" class="btn-icon" title="Import Workout (.ZWO, .ERG, .MRC, .JSON)">📥</button>
         <button id="btn-layout" class="btn-icon" title="Switch HUD Layout (L): Bottom / Left / Right">⬇️</button>
         <button id="btn-summary" class="btn-icon" title="Workout Summary (S)">📊</button>
@@ -2542,32 +2543,69 @@
       fileInput.value = '';
     };
 
+    // Global fetch interceptor to trigger LAN PIN Pairing Modal on 401 Unauthorized
+    const origFetch = window.fetch;
+    window.fetch = async function(...args) {
+      const res = await origFetch.apply(this, args);
+      if (res && res.status === 401) {
+        openPinModal();
+      }
+      return res;
+    };
+
+    function openPinModal() {
+      const pinModal = document.getElementById('pin-modal');
+      if (pinModal) {
+        pinModal.classList.add('open');
+        const input = document.getElementById('input-lan-pin');
+        if (input) {
+          input.value = '';
+          input.focus();
+        }
+      }
+    }
+
     function applyImportedWorkout(w) {
       if (!w || !w.steps) return;
+      const progKey = 'custom_' + (w.id || Date.now());
       const select = document.getElementById('quick-select-program');
-      const opt = document.createElement('option');
-      opt.value = 'custom_' + (w.id || Date.now());
-      opt.textContent = '📥 ' + w.name;
-      select.appendChild(opt);
-      select.value = opt.value;
-      PROGRAMS[opt.value] = w.steps.map(s => ({
-        name: s.name,
-        duration: s.duration_sec,
-        minRpm: s.cadence_low || s.cadence_target || 70,
-        maxRpm: s.cadence_high || (s.cadence_target ? s.cadence_target + 10 : 90),
-        color: s.color || '#38bdf8',
-        desc: s.cue_message || (s.target_watts ? `${s.target_watts}W Target` : `${Math.round((s.power_low_pct||1)*100)}% FTP`),
-        knob: s.knob || 'med'
-      }));
-      setProgram(opt.value, true);
+      if (select) {
+        const opt = document.createElement('option');
+        opt.value = progKey;
+        opt.textContent = '📥 ' + w.name;
+        select.appendChild(opt);
+        select.value = opt.value;
+      }
+      const modalSelect = document.getElementById('select-program');
+      if (modalSelect) {
+        const opt2 = document.createElement('option');
+        opt2.value = progKey;
+        opt2.textContent = '📥 ' + w.name;
+        modalSelect.appendChild(opt2);
+      }
+      WORKOUT_PROGRAMS[progKey] = {
+        name: w.name,
+        intervals: w.steps.map(s => ({
+          name: s.name,
+          duration: s.duration_sec,
+          minRpm: s.cadence_low || s.cadence_target || 70,
+          maxRpm: s.cadence_high || (s.cadence_target ? s.cadence_target + 10 : 90),
+          color: s.color || '#38bdf8',
+          desc: s.cue_message || (s.target_watts ? `${s.target_watts}W Target` : `${Math.round((s.power_low_pct||1)*100)}% FTP`),
+          knob: s.knob || 'med'
+        }))
+      };
+      setProgram(progKey, false);
     }
 
     // LAN Pairing PIN Modal
     const pinModal = document.getElementById('pin-modal');
+    const btnPin = document.getElementById('btn-pin');
+    if (btnPin) btnPin.onclick = openPinModal;
     document.getElementById('btn-close-pin').onclick = () => pinModal.classList.remove('open');
     document.getElementById('btn-submit-pin').onclick = () => {
       const pin = document.getElementById('input-lan-pin').value.trim();
-      fetch('/api/auth/pin', {
+      origFetch('/api/auth/pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin })
@@ -2580,6 +2618,9 @@
         } else {
           document.getElementById('pin-error-msg').textContent = 'Invalid PIN. Check terminal.';
         }
+      })
+      .catch(() => {
+        document.getElementById('pin-error-msg').textContent = 'Authentication failed.';
       });
     };
 

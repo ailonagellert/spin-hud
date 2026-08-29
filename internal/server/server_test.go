@@ -177,3 +177,46 @@ func TestServerLANAuth(t *testing.T) {
 		t.Fatalf("request with X-PIN header should succeed, got %d", rec.Code)
 	}
 }
+
+func TestPauseDoesNotDuplicateHistory(t *testing.T) {
+	srv, database, st := setupTestServer(t, "")
+	defer database.Close()
+	handler := srv.Handler()
+
+	// Seed ride telemetry and simulate elapsed time
+	hr := 140
+	spd := 18.0
+	st.UpdateTelemetry(session.Telemetry{HR: &hr, SpeedMPH: &spd})
+	st.AddDistanceDelta(1.5)
+
+	// Simulate 20 seconds of ride
+	time.Sleep(50 * time.Millisecond)
+
+	// Toggle pause
+	req := httptest.NewRequest(http.MethodPost, "/api/workout/toggle", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/workout/toggle failed: %d", rec.Code)
+	}
+
+	// Toggle resume
+	req = httptest.NewRequest(http.MethodPost, "/api/workout/toggle", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	// Toggle pause again
+	req = httptest.NewRequest(http.MethodPost, "/api/workout/toggle", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	// Verify history has 0 records (pause should NOT save)
+	rides, err := database.ListRides(10, 0)
+	if err != nil {
+		t.Fatalf("ListRides failed: %v", err)
+	}
+	if len(rides) != 0 {
+		t.Fatalf("expected 0 saved rides after pause toggles, got %d", len(rides))
+	}
+}
+

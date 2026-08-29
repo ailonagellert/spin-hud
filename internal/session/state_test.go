@@ -144,3 +144,80 @@ func TestTCXExportValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestSensorDisconnectTelemetryClearing(t *testing.T) {
+	st := NewState(DefaultPlaylistID)
+	st.SetSensor("hr", true, "Garmin HR")
+	st.SetSensor("cadence", true, "Cadence")
+	st.SetSensor("speed", true, "Speed")
+	st.SetSensor("power", true, "Power Meter")
+
+	hr := 145
+	cad := 92.0
+	spd := 22.5
+	watts := 210
+	pSrc := "meter"
+	st.UpdateTelemetry(Telemetry{
+		HR:          &hr,
+		Cadence:     &cad,
+		SpeedMPH:    &spd,
+		PowerWatts:  &watts,
+		PowerSource: &pSrc,
+	})
+
+	snap := st.GetSnapshot()
+	if snap.HR == nil || *snap.HR != 145 {
+		t.Fatalf("expected HR 145, got %v", snap.HR)
+	}
+	if snap.Cadence == nil || *snap.Cadence != 92 {
+		t.Fatalf("expected Cadence 92, got %v", snap.Cadence)
+	}
+	if snap.SpeedMPH == nil || *snap.SpeedMPH != 22.5 {
+		t.Fatalf("expected SpeedMPH 22.5, got %v", snap.SpeedMPH)
+	}
+	if snap.Watts != 210 {
+		t.Fatalf("expected Watts 210, got %d", snap.Watts)
+	}
+
+	// 1. Test SetSensor(..., false, ...) clears live values
+	st.SetSensor("hr", false, "Disconnected")
+	snap = st.GetSnapshot()
+	if snap.HR != nil {
+		t.Fatalf("expected nil HR after SetSensor disconnect, got %v", snap.HR)
+	}
+
+	st.SetSensor("cadence", false, "Disconnected")
+	snap = st.GetSnapshot()
+	if snap.Cadence != nil {
+		t.Fatalf("expected nil Cadence after SetSensor disconnect, got %v", snap.Cadence)
+	}
+
+	st.SetSensor("speed", false, "Disconnected")
+	snap = st.GetSnapshot()
+	if snap.SpeedMPH != nil {
+		t.Fatalf("expected nil SpeedMPH after SetSensor disconnect, got %v", snap.SpeedMPH)
+	}
+
+	st.SetSensor("power", false, "Disconnected")
+	snap = st.GetSnapshot()
+	if snap.Watts != 0 {
+		t.Fatalf("expected 0 Watts after power disconnect, got %d", snap.Watts)
+	}
+
+	// 2. Test explicit UpdateTelemetry Clear* flags
+	st.SetSensor("hr", true, "Garmin HR")
+	st.SetSensor("cadence", true, "Cadence")
+	st.SetSensor("speed", true, "Speed")
+	st.SetSensor("power", true, "Power Meter")
+	st.UpdateTelemetry(Telemetry{HR: &hr, Cadence: &cad, SpeedMPH: &spd, PowerWatts: &watts, PowerSource: &pSrc})
+	st.UpdateTelemetry(Telemetry{
+		ClearHR:      true,
+		ClearCadence: true,
+		ClearSpeed:   true,
+		ClearPower:   true,
+	})
+	snap = st.GetSnapshot()
+	if snap.HR != nil || snap.Cadence != nil || snap.SpeedMPH != nil || snap.Watts != 0 {
+		t.Fatalf("expected all cleared telemetry, got HR=%v Cad=%v Spd=%v Watts=%d", snap.HR, snap.Cadence, snap.SpeedMPH, snap.Watts)
+	}
+}

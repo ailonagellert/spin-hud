@@ -233,7 +233,7 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 				m.activeHR = nil
 				m.mu.Unlock()
 				state.SetSensor("hr", false, "Disconnected")
-				state.UpdateTelemetry(session.Telemetry{HR: nil})
+				state.UpdateTelemetry(session.Telemetry{ClearHR: true})
 				activeHR = nil
 			}
 		}
@@ -244,7 +244,7 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 				m.activeCad = nil
 				m.mu.Unlock()
 				state.SetSensor("cadence", false, "Disconnected (spin crank to wake)")
-				state.UpdateTelemetry(session.Telemetry{Cadence: nil})
+				state.UpdateTelemetry(session.Telemetry{ClearCadence: true})
 				activeCad = nil
 			}
 		}
@@ -255,7 +255,7 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 				m.activeSpd = nil
 				m.mu.Unlock()
 				state.SetSensor("speed", false, "Disconnected (spin wheel to wake)")
-				state.UpdateTelemetry(session.Telemetry{SpeedMPH: nil})
+				state.UpdateTelemetry(session.Telemetry{ClearSpeed: true})
 				activeSpd = nil
 			}
 		}
@@ -266,7 +266,7 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 				m.activePower = nil
 				m.mu.Unlock()
 				state.SetSensor("power", false, "Disconnected")
-				state.UpdateTelemetry(session.Telemetry{PowerWatts: nil})
+				state.UpdateTelemetry(session.Telemetry{ClearPower: true})
 				activePower = nil
 			}
 		}
@@ -277,15 +277,16 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 				m.activeFTMS = nil
 				m.mu.Unlock()
 				state.SetSensor("ftms", false, "Disconnected")
-				state.UpdateTelemetry(session.Telemetry{PowerWatts: nil})
+				state.UpdateTelemetry(session.Telemetry{ClearPower: true})
 				activeFTMS = nil
 			}
 		}
 
-
 		needHR := (activeHR == nil) && !connectingHR
 		needCad := (activeCad == nil) && !connectingCad
 		needSpd := (activeSpd == nil) && !connectingSpd
+		needPower := (activePower == nil) && !connectingPower
+		needFTMS := (activeFTMS == nil) && !connectingFTMS
 		anyConnecting := connectingHR || connectingCad || connectingSpd || connectingPower || connectingFTMS
 
 		if !needHR && !needCad && !needSpd && !anyConnecting {
@@ -312,9 +313,11 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 
 		// Perform a short BLE scan to find missing sensors
 		var (
-			foundHR  []discoveredDev
-			foundCSC []discoveredCSC
-			scanMu   sync.Mutex
+			foundHR    []discoveredDev
+			foundCSC   []discoveredCSC
+			foundPower []discoveredDev
+			foundFTMS  []discoveredDev
+			scanMu     sync.Mutex
 		)
 
 		scanTimer := time.AfterFunc(3*time.Second, func() {
@@ -392,6 +395,42 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 					isCad:  isCad,
 				})
 			}
+
+			// Power Meter (0x1818)
+			hasPower := result.HasServiceUUID(powerServiceUUID)
+			if !hasPower {
+				for _, kw := range []string{"stages", "assioma", "4iiii", "quarq", "power meter", "cycling power", "rally", "vector"} {
+					if strings.Contains(nameLower, kw) {
+						hasPower = true
+						break
+					}
+				}
+			}
+			if hasPower {
+				lbl := name
+				if lbl == "" {
+					lbl = result.Address.String()
+				}
+				foundPower = append(foundPower, discoveredDev{result: result, label: lbl})
+			}
+
+			// FTMS Indoor Trainer (0x1826)
+			hasFTMS := result.HasServiceUUID(ftmsServiceUUID)
+			if !hasFTMS {
+				for _, kw := range []string{"kickr", "tacx", "wahoo", "neo", "suito", "direto", "flux", "saris", "ftms", "trainer", "smart bike", "indoor bike"} {
+					if strings.Contains(nameLower, kw) {
+						hasFTMS = true
+						break
+					}
+				}
+			}
+			if hasFTMS {
+				lbl := name
+				if lbl == "" {
+					lbl = result.Address.String()
+				}
+				foundFTMS = append(foundFTMS, discoveredDev{result: result, label: lbl})
+			}
 		})
 		scanTimer.Stop()
 
@@ -400,6 +439,20 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 			target := foundHR[0]
 			needHR = false
 			go m.connectHR(state, target.result.Address, target.label)
+		}
+
+		// Dispatch Power connection
+		if needPower && len(foundPower) > 0 {
+			target := foundPower[0]
+			needPower = false
+			go m.connectPower(state, target.result.Address, target.label)
+		}
+
+		// Dispatch FTMS connection
+		if needFTMS && len(foundFTMS) > 0 {
+			target := foundFTMS[0]
+			needFTMS = false
+			go m.connectFTMS(state, target.result.Address, target.label)
 		}
 
 		// Dispatch CSC connections: explicit matching first
