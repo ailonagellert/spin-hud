@@ -8,7 +8,9 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"syscall"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"spin-hud/internal/ble"
 	"spin-hud/internal/server"
 	"spin-hud/internal/session"
+	"spin-hud/internal/strava"
 )
 
 //go:embed web/index.html
@@ -92,7 +95,17 @@ func main() {
 		log.Fatalf("embedded UI missing: %v", err)
 	}
 
-	srv := server.New(state, string(indexHTML))
+	exePath, exeErr := os.Executable()
+	base := "."
+	if exeErr == nil {
+		base = filepath.Dir(exePath)
+	}
+	sc := strava.New(
+		filepath.Join(base, "strava-app.json"),
+		filepath.Join(base, "strava-tokens.json"),
+		fmt.Sprintf("http://localhost:%d/api/strava/callback", *port),
+	)
+	srv := server.New(state, string(indexHTML), sc)
 
 	listener, err := server.Listen(host, *port)
 	if err != nil {

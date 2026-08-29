@@ -4,3 +4,5 @@ __pycache__/
 *.exe
 *.exe~
 img/Thumbs.db
+strava-app.json
+strava-tokens.json

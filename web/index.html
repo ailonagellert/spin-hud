@@ -1275,6 +1275,15 @@
         <label class="form-label">Video Sync Lead / Offset (seconds)</label>
         <input type="number" id="input-video-offset" class="form-input" value="3.5" step="0.5" min="0" max="30">
       </div>
+      <div class="form-group">
+        <label class="form-label">Strava</label>
+        <div id="strava-status" style="font-size:13px;opacity:.85;margin-bottom:8px;">Not connected</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" id="btn-strava-connect" class="btn-primary" style="background:linear-gradient(135deg,#fc4c02,#e34402);">Connect Strava</button>
+          <button type="button" id="btn-strava-disconnect" class="btn-primary" style="display:none;">Disconnect</button>
+        </div>
+        <div style="font-size:12px;opacity:.65;margin-top:6px;">Same API app as Gear Tracker. Posts virtual watts. Garmin still syncs a second ride unless you turn that off for indoor.</div>
+      </div>
       <button id="btn-save-settings" class="btn-primary">Save & Apply</button>
     </div>
   </div>
@@ -1321,6 +1330,8 @@
         </div>
       </div>
       <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
+        <button id="btn-strava-upload" class="btn-primary" style="background: linear-gradient(135deg, #fc4c02, #e34402); color:#fff;">Post to Strava</button>
+        <div id="strava-upload-status" style="font-size:13px;opacity:.85;min-height:1.2em;"></div>
         <button id="btn-export-tcx" class="btn-primary" style="background: linear-gradient(135deg, #fc4c02, #e34402); color:#fff;">💾 Download Strava / Garmin (.TCX)</button>
         <button id="btn-done-summary" class="btn-primary">Awesome Ride!</button>
       </div>
@@ -2225,6 +2236,72 @@
       window.location.href = '/api/workout/export.tcx';
     };
 
+    function currentRideMeta() {
+      let title = 'Spin Studio';
+      let url = '';
+      try {
+        if (player && player.getVideoData) {
+          const id = player.getVideoData().video_id;
+          if (id) {
+            url = 'https://www.youtube.com/watch?v=' + id;
+            if (videoTitleCache[id]) title = videoTitleCache[id];
+          }
+        }
+      } catch (e) {}
+      const desc = (url ? (title + '\n' + url + '\n\n') : '') + 'Virtual watts from Spin Studio (pad-brake estimate).';
+      return { name: title, description: desc };
+    }
+
+    function setStravaStatus(d) {
+      const el = document.getElementById('strava-status');
+      const conn = document.getElementById('btn-strava-connect');
+      const disc = document.getElementById('btn-strava-disconnect');
+      if (!el) return;
+      if (!d || !d.configured) {
+        el.textContent = 'Drop client id/secret into strava-app.json (same app as Gear Tracker). Callback domain must allow localhost.';
+        if (conn) conn.style.display = 'none';
+        if (disc) disc.style.display = 'none';
+        return;
+      }
+      if (d.connected) {
+        el.textContent = d.athlete ? ('Connected as ' + d.athlete) : 'Connected';
+        if (conn) conn.style.display = 'none';
+        if (disc) disc.style.display = '';
+      } else {
+        el.textContent = 'Not connected';
+        if (conn) conn.style.display = '';
+        if (disc) disc.style.display = 'none';
+      }
+    }
+
+    function refreshStravaStatus() {
+      fetch('/api/strava/status').then(r => r.json()).then(setStravaStatus).catch(() => {});
+    }
+
+    function uploadToStrava() {
+      const status = document.getElementById('strava-upload-status');
+      if (status) status.textContent = 'Posting…';
+      const meta = currentRideMeta();
+      fetch('/api/strava/upload', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(meta)
+      }).then(r => r.json().then(d => ({ok: r.ok, d}))).then(({ok, d}) => {
+        if (!status) return;
+        if (d && d.already) status.textContent = 'Already posted this ride.';
+        else if (d && d.ok) status.textContent = 'Posted to Strava.';
+        else status.textContent = (d && d.error) ? d.error : 'Post failed';
+      }).catch(() => { if (status) status.textContent = 'Post failed'; });
+    }
+
+    document.getElementById('btn-strava-connect').onclick = () => { window.location.href = '/api/strava/login'; };
+    document.getElementById('btn-strava-disconnect').onclick = () => {
+      fetch('/api/strava/disconnect', { method: 'POST' }).then(() => refreshStravaStatus());
+    };
+    document.getElementById('btn-strava-upload').onclick = uploadToStrava;
+    if (new URLSearchParams(location.search).get('strava') === 'ok') refreshStravaStatus();
+
+
     document.getElementById('btn-timer-toggle').onclick = () => {
       fetch('/api/workout/toggle', { method: 'POST' }).then(() => {
         if (!player || !latestSnapshot) return;
@@ -2259,6 +2336,7 @@
       if (modalSelect) modalSelect.value = currentProgram;
       const offsetInput = document.getElementById('input-video-offset');
       if (offsetInput) offsetInput.value = videoSyncOffset;
+      refreshStravaStatus();
       modal.classList.add('open');
     };
     document.getElementById('btn-close-modal').onclick = () => modal.classList.remove('open');

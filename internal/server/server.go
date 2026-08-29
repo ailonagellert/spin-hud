@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"spin-hud/internal/session"
+	"spin-hud/internal/strava"
 )
 
 var (
@@ -22,14 +23,15 @@ var (
 )
 
 type Server struct {
-	State      *session.State
-	indexHTML  string
+	State     *session.State
+	indexHTML string
+	Strava    *strava.Client
 }
 
 // New builds the HTTP handler set; indexHTML is the embedded UI with the
 // __PLAYLIST_ID__ placeholder still present.
-func New(state *session.State, indexHTML string) *Server {
-	return &Server{State: state, indexHTML: indexHTML}
+func New(state *session.State, indexHTML string, sc *strava.Client) *Server {
+	return &Server{State: state, indexHTML: indexHTML, Strava: sc}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -42,6 +44,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/settings", s.handleSettings)
 	mux.HandleFunc("/api/knob", s.handleKnob)
 	mux.HandleFunc("/api/youtube/title", s.handleYouTubeTitle)
+	mux.HandleFunc("/api/strava/status", s.handleStravaStatus)
+	mux.HandleFunc("/api/strava/login", s.handleStravaLogin)
+	mux.HandleFunc("/api/strava/callback", s.handleStravaCallback)
+	mux.HandleFunc("/api/strava/disconnect", s.handleStravaDisconnect)
+	mux.HandleFunc("/api/strava/upload", s.handleStravaUpload)
 	return mux
 }
 
