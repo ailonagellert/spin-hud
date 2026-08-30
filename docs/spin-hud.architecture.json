@@ -1,0 +1,264 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Spin Studio HUD System Architecture",
+    "output": "docs/spin-hud-architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/ailonagellert/spin-hud",
+      "revision": "89c26f184fd52a094d7b264a971e00b29dd87915"
+    },
+    "views": [
+      {
+        "id": "live-telemetry",
+        "label": "Live Telemetry & HUD",
+        "focus": ["sensors_ble", "ble_manager", "session_engine", "server_http", "web_hud"],
+        "note": "5 Hz real-time pipeline streaming BLE sensor packets directly to the glassmorphic HUD overlay."
+      },
+      {
+        "id": "persistence-sync",
+        "label": "Persistence, FIT & Strava",
+        "focus": ["session_engine", "sqlite_db", "fit_tcx_exporter", "strava_client"],
+        "note": "Session recording into SQLite with Garmin binary .FIT / .TCX exports and Strava OAuth upload."
+      },
+      {
+        "id": "multi-screen-lan",
+        "label": "LAN Remote & Video Sync",
+        "focus": ["server_http", "lan_devices", "web_hud", "youtube_player"],
+        "note": "Multi-screen LAN control with 6-digit PIN security alongside video-matched interval coaching."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "lan_devices",
+      "type": "external",
+      "label": "LAN Remote Clients",
+      "sublabel": "iPads, Phones, Smart TVs",
+      "pos": [715, 35],
+      "size": [150, 54],
+      "tag": "6-Digit PIN Auth"
+    },
+    {
+      "id": "sensors_ble",
+      "type": "external",
+      "label": "BLE Sensors",
+      "sublabel": "Garmin HR, Magene, FTMS",
+      "pos": [40, 145],
+      "size": [140, 56],
+      "tag": "0x180D / 0x1816 / 0x1826"
+    },
+    {
+      "id": "ble_manager",
+      "type": "backend",
+      "label": "BLE Manager",
+      "sublabel": "internal/ble",
+      "brand": "go",
+      "pos": [255, 145],
+      "size": [145, 56],
+      "tag": "GATT Discovery Loop",
+      "sources": [
+        { "path": "internal/ble/manager.go", "line": 28, "label": "BLE Manager" }
+      ]
+    },
+    {
+      "id": "session_engine",
+      "type": "backend",
+      "label": "Telemetry Engine",
+      "sublabel": "internal/session",
+      "brand": "go",
+      "pos": [480, 145],
+      "size": [155, 56],
+      "tag": "5 Zones + Virtual Power",
+      "sources": [
+        { "path": "internal/session/state.go", "line": 24, "label": "Session State" }
+      ]
+    },
+    {
+      "id": "server_http",
+      "type": "backend",
+      "label": "HTTP & SSE Server",
+      "sublabel": "internal/server",
+      "brand": "go",
+      "pos": [715, 145],
+      "size": [150, 56],
+      "tag": "5 Hz Stream :8080",
+      "sources": [
+        { "path": "internal/server/server.go", "line": 35, "label": "HTTP Server" }
+      ]
+    },
+    {
+      "id": "web_hud",
+      "type": "frontend",
+      "label": "Glassmorphic HUD",
+      "sublabel": "web/index.html",
+      "pos": [945, 145],
+      "size": [140, 56],
+      "tag": "Real-Time Gauges",
+      "sources": [
+        { "path": "web/index.html", "line": 1, "label": "HUD UI" }
+      ]
+    },
+    {
+      "id": "sqlite_db",
+      "type": "database",
+      "label": "SQLite Store",
+      "sublabel": "internal/db",
+      "brand": "sqlite",
+      "pos": [480, 265],
+      "size": [155, 56],
+      "tag": "History & Workouts",
+      "sources": [
+        { "path": "internal/db/db.go", "line": 20, "label": "SQLite Store" }
+      ]
+    },
+    {
+      "id": "fit_tcx_exporter",
+      "type": "backend",
+      "label": "FIT & TCX Exporter",
+      "sublabel": "internal/fit",
+      "brand": "go",
+      "pos": [715, 265],
+      "size": [150, 56],
+      "tag": "Garmin Binary .FIT",
+      "sources": [
+        { "path": "internal/fit/fit.go", "line": 15, "label": "FIT Encoder" }
+      ]
+    },
+    {
+      "id": "youtube_player",
+      "type": "external",
+      "label": "YouTube Player",
+      "sublabel": "IFrame API & Playlists",
+      "brand": "youtube",
+      "pos": [945, 265],
+      "size": [140, 56],
+      "tag": "Video Clock Sync"
+    },
+    {
+      "id": "strava_client",
+      "type": "cloud",
+      "label": "Strava Client",
+      "sublabel": "internal/strava",
+      "pos": [715, 385],
+      "size": [150, 56],
+      "tag": "OAuth 2.0 Upload",
+      "sources": [
+        { "path": "internal/strava/client.go", "line": 18, "label": "Strava API" }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "spin-hud Standalone Binary (Single Portable Executable)",
+      "wraps": ["ble_manager", "session_engine", "server_http", "sqlite_db", "fit_tcx_exporter", "strava_client"],
+      "pad": 18
+    },
+    {
+      "kind": "security-group",
+      "label": "Real-Time Telemetry Engine",
+      "wraps": ["ble_manager", "session_engine", "server_http"],
+      "pad": 12
+    }
+  ],
+  "connections": [
+    {
+      "id": "ble-to-manager",
+      "from": "sensors_ble",
+      "to": "ble_manager",
+      "label": "BLE GATT",
+      "variant": "emphasis"
+    },
+    {
+      "id": "manager-to-session",
+      "from": "ble_manager",
+      "to": "session_engine",
+      "label": "metrics"
+    },
+    {
+      "id": "session-to-server",
+      "from": "session_engine",
+      "to": "server_http",
+      "label": "state"
+    },
+    {
+      "id": "server-to-hud",
+      "from": "server_http",
+      "to": "web_hud",
+      "label": "5 Hz SSE",
+      "variant": "emphasis"
+    },
+    {
+      "id": "hud-to-yt",
+      "from": "web_hud",
+      "to": "youtube_player",
+      "label": "clock sync",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 18
+    },
+    {
+      "id": "session-to-sqlite",
+      "from": "session_engine",
+      "to": "sqlite_db",
+      "label": "trackpoints",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 18
+    },
+    {
+      "id": "sqlite-to-exporter",
+      "from": "sqlite_db",
+      "to": "fit_tcx_exporter",
+      "label": "history"
+    },
+    {
+      "id": "exporter-to-strava",
+      "from": "fit_tcx_exporter",
+      "to": "strava_client",
+      "label": "sync activity",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 18
+    },
+    {
+      "id": "server-to-lan",
+      "from": "server_http",
+      "to": "lan_devices",
+      "label": "PIN pairing",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "BLE Sensors & Hardware Ingest",
+      "items": [
+        "Direct Bluetooth LE GATT discovery for Garmin HR, Magene CSC, Power Meters, and FTMS trainers",
+        "Autonomous reconnect loop without requiring OS-level Bluetooth pairing"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Real-Time Telemetry & Glassmorphic HUD",
+      "items": [
+        "5-zone Heart Rate calculation with instant visual zone color feedback and virtual power estimation",
+        "High-frequency 5 Hz SSE stream delivers sub-second telemetry to browser HUD and remote LAN screens"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Durable Storage, FIT Exports & Strava",
+      "items": [
+        "Embedded pure Go SQLite store records completed rides and interval trackpoints",
+        "Garmin binary .FIT and XML .TCX generator with 1-click Strava cloud upload"
+      ]
+    }
+  ]
+}

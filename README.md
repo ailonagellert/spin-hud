@@ -31,11 +31,20 @@ For in-depth guides on setup, hardware, training metrics, and developer integrat
 
 | Guide | Description |
 |---|---|
+| 🏛️ [**System Architecture (Interactive)**](docs/spin-hud-architecture.html) | Interactive system map generated with Archify (BLE GATT ingest, 5 Hz SSE stream, SQLite storage, and Strava sync) |
 | 🛠️ [**Hardware & Sensors Guide**](docs/HARDWARE_AND_SENSORS.md) | Pairing Garmin 965 HR, Magene S3+ Cadence/Speed, Power Meters, FTMS Trainers, and flywheel calibration |
 | 🚴 [**Workouts & File Importer**](docs/WORKOUTS_AND_IMPORTING.md) | Video-matched profiles, interval coaching cues, and importing `.zwo` (Zwift), `.mrc`, `.erg`, and JSON files |
 | 📱 [**LAN & Remote Control**](docs/LAN_REMOTE_CONTROL.md) | Multi-device setups (tablets/phones/TVs), `--lan` mode, 6-digit PIN pairing security, and auto-401 authentication |
 | 📊 [**Metrics, History & Exports**](docs/METRICS_AND_EXPORTS.md) | HR zones, virtual vs. real power (W/kg), ride history in SQLite, Garmin `.FIT` / `.TCX` downloads, and Strava upload |
 | 📡 [**REST & SSE API Reference**](docs/API_REFERENCE.md) | Complete HTTP and 5 Hz Server-Sent Events API reference for developers and automation |
+
+---
+
+## 🏛️ System Architecture
+
+![Spin Studio HUD Architecture Diagram](img/architecture.png)
+
+> **Interactive System Map**: Explore the interactive diagram with guided views (Live Telemetry Pipeline, SQLite Persistence & Strava Upload, Multi-Device LAN Control) at [`docs/spin-hud-architecture.html`](docs/spin-hud-architecture.html). Generated with [Archify](https://github.com/tt-a1i/archify).
 
 ---
 

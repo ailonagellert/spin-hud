@@ -13,4 +13,5 @@ strava-tokens.json
 .spin_hud_devices.json
 dist/
 build/
+*.visual-check.*
 
