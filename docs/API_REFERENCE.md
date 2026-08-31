@@ -89,14 +89,30 @@ Starts or pauses the active workout recording and timer.
 }
 ```
 
-### `POST /api/workout/reset` 🔒
-Stops the current ride, automatically persists the session to SQLite history (if elapsed time > 10s and movement occurred), and resets stopwatch, distance, calories, and interval state.
+### `POST /api/workout/finish` 🔒
+Pauses the active timer, finalizes session telemetry, and persists the completed workout to the SQLite database (`spin_hud.db`).
 
 **Response:**
 ```json
 {
   "ok": true,
-  "message": "Workout reset and saved to history"
+  "saved": true,
+  "ride_id": 42,
+  "elapsed_sec": 1800,
+  "calories": 425,
+  "distance_mi": 12.4
+}
+```
+
+### `POST /api/workout/reset` 🔒
+Stops the current ride, automatically persists the session to SQLite history (if elapsed time >= 5s), and resets stopwatch, distance, calories, and interval state.
+
+**Response:**
+```json
+{
+  "ok": true,
+  "saved": true,
+  "ride_id": 42
 }
 ```
 

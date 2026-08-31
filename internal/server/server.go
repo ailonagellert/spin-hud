@@ -127,6 +127,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/workout/export.tcx", s.handleTCXExport)
 	mux.HandleFunc("/api/workout/export.fit", s.handleFITExport)
 	mux.HandleFunc("/api/workout/reset", s.authMiddleware(s.handleReset))
+	mux.HandleFunc("/api/workout/finish", s.authMiddleware(s.handleFinish))
 	mux.HandleFunc("/api/workout/toggle", s.authMiddleware(s.handleToggle))
 	mux.HandleFunc("/api/settings", s.authMiddleware(s.handleSettings))
 	mux.HandleFunc("/api/knob", s.authMiddleware(s.handleKnob))
@@ -345,19 +346,19 @@ func (s *Server) handleFITExport(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-func (s *Server) autoSaveCurrentRide() {
+func (s *Server) autoSaveCurrentRide() (int64, error) {
 	if s.DB == nil {
-		return
+		return 0, nil
 	}
 	snap := s.State.GetSnapshot()
-	if snap.ElapsedSec < 15 {
-		return // ignore accidental momentary restarts
+	if snap.ElapsedSec < 5 {
+		return 0, nil // ignore accidental momentary restarts under 5s
 	}
 	start := s.State.WorkoutStartWall()
 	s.hubMu.Lock()
 	if !s.lastSavedStart.IsZero() && s.lastSavedStart.Equal(start) {
 		s.hubMu.Unlock()
-		return
+		return 0, nil
 	}
 	s.lastSavedStart = start
 	s.hubMu.Unlock()
@@ -368,7 +369,41 @@ func (s *Server) autoSaveCurrentRide() {
 	if name == "" {
 		name = "Spin Ride"
 	}
-	_, _ = s.DB.SaveRide(snap, start, end, pts, name)
+	return s.DB.SaveRide(snap, start, end, pts, name)
+}
+
+func (s *Server) handleFinish(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	s.State.PauseWorkoutTimer()
+	rideID, err := s.autoSaveCurrentRide()
+	snap := s.State.GetSnapshot()
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"ok":            true,
+		"saved":         rideID > 0,
+		"ride_id":       rideID,
+		"elapsed_sec":   snap.ElapsedSec,
+		"calories":      snap.Calories,
+		"distance_mi":   snap.DistanceMi,
+		"distance_km":   snap.DistanceKm,
+		"avg_hr":        snap.AvgHR,
+		"max_hr":        snap.MaxHR,
+		"avg_cadence":   snap.AvgCadence,
+		"max_cadence":   snap.MaxCadence,
+		"avg_speed_mph": snap.AvgSpeedMPH,
+		"max_speed_mph": snap.MaxSpeedMPH,
+		"avg_watts":     snap.AvgWatts,
+		"max_watts":     snap.MaxWatts,
+		"workout_name":  snap.WorkoutName,
+		"error":         errMsg,
+	})
 }
 
 func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
@@ -376,10 +411,14 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	s.autoSaveCurrentRide()
+	rideID, _ := s.autoSaveCurrentRide()
 	s.State.ResetWorkout()
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprint(w, `{"ok":true}`)
+	json.NewEncoder(w).Encode(map[string]any{
+		"ok":      true,
+		"saved":   rideID > 0,
+		"ride_id": rideID,
+	})
 }
 
 func (s *Server) handleToggle(w http.ResponseWriter, r *http.Request) {

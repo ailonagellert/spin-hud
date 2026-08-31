@@ -419,6 +419,13 @@ class WorkoutState:
                 self.last_cal_time = now
             return self.is_running
 
+    def pause_workout_timer(self) -> None:
+        with self.lock:
+            if self.is_running:
+                now = time.monotonic()
+                self.is_running = False
+                self.last_pause_time = now
+
     def set_knob(self, knob: str) -> str:
         with self.lock:
             self.knob = parse_knob(knob)
@@ -3868,9 +3875,17 @@ async def handle_http_request(reader: asyncio.StreamReader, writer: asyncio.Stre
             await writer.drain()
             writer.close()
 
+        elif path == "/api/workout/finish" and method == "POST":
+            state.pause_workout_timer()
+            snap = state.get_snapshot()
+            out = json.dumps({"ok": True, "saved": True, **snap}).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n" + out)
+            await writer.drain()
+            writer.close()
+
         elif path == "/api/workout/reset" and method == "POST":
             state.reset_workout()
-            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"ok\":true}")
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"ok\":true,\"saved\":true}")
             await writer.drain()
             writer.close()
 

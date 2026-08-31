@@ -48,6 +48,7 @@ To protect your spin session from unauthorized interference across your home or 
 | **Watch Workout Video & Interval Cues** | ✅ Allowed | ✅ Allowed |
 | **Browse Completed Ride History** | ✅ Allowed | ✅ Allowed |
 | **Start / Pause Workout Timer** (`/api/workout/toggle`) | ❌ Requires PIN | ✅ Allowed |
+| **Finish & Save Workout** (`/api/workout/finish`) | ❌ Requires PIN | ✅ Allowed |
 | **Reset & Save Workout** (`/api/workout/reset`) | ❌ Requires PIN | ✅ Allowed |
 | **Import Custom Workouts** (`/api/workouts/import`) | ❌ Requires PIN | ✅ Allowed |
 | **Modify Profile & Calibration** (`/api/settings`) | ❌ Requires PIN | ✅ Allowed |

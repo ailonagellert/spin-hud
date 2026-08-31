@@ -218,6 +218,49 @@ func TestPauseDoesNotDuplicateHistory(t *testing.T) {
 	}
 }
 
+func TestServerWorkoutFinishAndReset(t *testing.T) {
+	srv, database, st := setupTestServer(t, "")
+	defer database.Close()
+	handler := srv.Handler()
+
+	// Seed ride telemetry
+	hr := 155
+	spd := 21.5
+	st.UpdateTelemetry(session.Telemetry{HR: &hr, SpeedMPH: &spd})
+	st.AddDistanceDelta(3.2)
+	st.SetWorkoutName("Pyramid HIIT Finish Test")
+
+	// 1. POST /api/workout/finish
+	req := httptest.NewRequest(http.MethodPost, "/api/workout/finish", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/workout/finish failed: %d", rec.Code)
+	}
+	var finishResp map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&finishResp); err != nil {
+		t.Fatalf("failed to decode finish response: %v", err)
+	}
+	if ok, _ := finishResp["ok"].(bool); !ok {
+		t.Fatalf("expected ok: true, got: %v", finishResp)
+	}
+
+	// 2. POST /api/workout/reset
+	req = httptest.NewRequest(http.MethodPost, "/api/workout/reset", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/workout/reset failed: %d", rec.Code)
+	}
+	var resetResp map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&resetResp); err != nil {
+		t.Fatalf("failed to decode reset response: %v", err)
+	}
+	if ok, _ := resetResp["ok"].(bool); !ok {
+		t.Fatalf("expected ok: true, got: %v", resetResp)
+	}
+}
+
 func TestLauncherModeInjection(t *testing.T) {
 	st := session.NewState(session.DefaultPlaylistID)
 	tmpDir := t.TempDir()

@@ -275,6 +275,18 @@ func (s *State) ToggleWorkoutTimer() bool {
 	return s.isRunning
 }
 
+// PauseWorkoutTimer stops the timer without toggling if already stopped.
+func (s *State) PauseWorkoutTimer() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.isRunning {
+		now := time.Now()
+		s.isRunning = false
+		s.lastPauseTime = now
+		s.workoutEndWall = now
+	}
+}
+
 func (s *State) SetWorkoutName(name string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

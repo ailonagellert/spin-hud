@@ -948,6 +948,31 @@
       background: rgba(255, 255, 255, 0.32);
     }
 
+    .touch-btn-finish {
+      height: 46px;
+      padding: 0 14px;
+      gap: 6px;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.35));
+      border: 1px solid rgba(16, 185, 129, 0.6);
+      color: #34d399;
+      font-family: 'Inter', sans-serif;
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: 0.8px;
+    }
+
+    .touch-btn-finish:hover {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.45), rgba(5, 150, 105, 0.7));
+      border-color: #34d399;
+      color: #fff;
+      transform: translateY(-2px) scale(1.04);
+      box-shadow: 0 0 18px rgba(16, 185, 129, 0.45);
+    }
+
+    .touch-btn-finish:active {
+      transform: translateY(1px) scale(0.95);
+    }
+
     .touch-btn-master-play {
       width: 56px;
       height: 56px;
@@ -1362,6 +1387,92 @@
       font-weight: 800;
       color: #fff;
     }
+
+    .summary-saved-banner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      margin-bottom: 14px;
+    }
+
+    .saved-banner-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: rgba(16, 185, 129, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .saved-banner-title {
+      font-weight: 700;
+      color: #34d399;
+      font-size: 14px;
+    }
+
+    .saved-banner-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Toast Notification Container */
+    .toast-container {
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .hud-toast {
+      pointer-events: auto;
+      padding: 10px 18px;
+      border-radius: 20px;
+      background: rgba(10, 14, 26, 0.94);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(0, 229, 255, 0.4);
+      color: #f8fafc;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      animation: toastIn 0.25s cubic-bezier(0.16, 1, 0.3, 1), toastOut 0.3s ease forwards;
+      animation-delay: 0s, 3.2s;
+    }
+
+    .hud-toast.success {
+      border-color: rgba(16, 185, 129, 0.6);
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
+    }
+
+    .hud-toast.info {
+      border-color: rgba(0, 229, 255, 0.6);
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.25);
+    }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(-12px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes toastOut {
+      from { opacity: 1; transform: translateY(0) scale(1); }
+      to { opacity: 0; transform: translateY(-10px) scale(0.95); }
+    }
   </style>
 </head>
 <body>
@@ -1493,6 +1604,17 @@
                 </span>
                 <span class="menu-item-label">Switch Layout</span>
                 <kbd class="menu-item-key">L</kbd>
+              </button>
+
+              <button id="btn-finish-menu" class="menu-item-btn" title="Complete Workout & Save (C)">
+                <span class="menu-item-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                    <line x1="4" y1="22" x2="4" y2="15"></line>
+                  </svg>
+                </span>
+                <span class="menu-item-label">Complete Workout</span>
+                <kbd class="menu-item-key">C</kbd>
               </button>
 
               <button id="btn-summary" class="menu-item-btn" title="Workout Summary (S)">
@@ -1679,7 +1801,15 @@
               </svg>
             </button>
 
-            <button id="btn-reset-timer" class="touch-btn touch-btn-reset" title="Reset Workout Session" aria-label="Reset Workout Session">
+            <button id="btn-finish-workout" class="touch-btn touch-btn-finish" title="Complete Workout & Save (C / Enter)" aria-label="Complete Workout">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                <line x1="4" y1="22" x2="4" y2="15"></line>
+              </svg>
+              <span>FINISH</span>
+            </button>
+
+            <button id="btn-reset-timer" class="touch-btn touch-btn-reset" title="Reset Workout Session (↺)" aria-label="Reset Workout Session">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="1 4 1 10 7 10"></polyline>
                 <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
@@ -1759,13 +1889,27 @@
 
   <!-- Summary Modal -->
   <div id="summary-modal" class="modal-backdrop">
-    <div class="modal-box" style="width: 500px;">
+    <div class="modal-box" style="width: 520px; max-width: 95vw;">
       <div class="modal-header">
         <h3 class="modal-title">🏆 Workout Summary</h3>
         <button id="btn-close-summary" class="btn-icon" title="Close">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
+
+      <!-- Confirmation Notice Banner -->
+      <div id="summary-saved-banner" class="summary-saved-banner">
+        <div class="saved-banner-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
+        <div class="saved-banner-text">
+          <div class="saved-banner-title">🎉 Workout Completed & Saved!</div>
+          <div id="summary-saved-subtitle" class="saved-banner-sub">Recorded to local SQLite database (spin_hud.db) with 1Hz sensor telemetry.</div>
+        </div>
+      </div>
+
       <div class="summary-grid">
         <div class="summary-stat-box">
           <div class="summary-label">Duration</div>
@@ -1807,7 +1951,11 @@
           <button id="btn-export-fit" class="btn-primary" style="background: linear-gradient(135deg, #0ea5e9, #0284c7); color:#fff;">💾 Download .FIT</button>
           <button id="btn-export-tcx" class="btn-primary" style="background: linear-gradient(135deg, #fc4c02, #e34402); color:#fff;">💾 Download .TCX</button>
         </div>
-        <button id="btn-done-summary" class="btn-primary">Awesome Ride!</button>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+          <button id="btn-view-history-from-sum" class="btn-primary" style="background: rgba(255, 255, 255, 0.12); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2);">📜 View History</button>
+          <button id="btn-launcher-from-sum" class="btn-primary" style="background: linear-gradient(135deg, #a855f7, #6366f1); color: #fff;">🎬 Workout Launcher</button>
+        </div>
+        <button id="btn-done-summary" class="btn-primary" style="background: rgba(255, 255, 255, 0.08); color: #94a3b8; font-weight: 500;">Close (Keep Riding)</button>
       </div>
     </div>
   </div>
@@ -2243,6 +2391,10 @@
       } else if (event.data === YT.PlayerState.PAUSED) {
         updateMasterPlayButtonUI(false);
         setWorkoutRunning(false);
+      } else if (event.data === YT.PlayerState.ENDED) {
+        updateMasterPlayButtonUI(false);
+        setWorkoutRunning(false);
+        completeWorkout(true);
       }
       const isVideoProg = currentProgram === 'video_sync' || currentProgram === 'auto' || currentProgram.startsWith('v_');
       const elapsed = (player && isVideoProg && typeof player.getCurrentTime === 'function')
@@ -2634,23 +2786,92 @@
       document.querySelector('.crank-icon').style.transform = `rotate(${crankAngle}deg)`;
     }
 
-    function showSummary() {
-      if (!latestSnapshot) return;
-      const d = latestSnapshot;
-      const elapsed = d.elapsed_sec || 0;
+    function showToast(msg, type = 'info', duration = 3200) {
+      let container = document.getElementById('toast-container');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+      }
+      const toast = document.createElement('div');
+      toast.className = `hud-toast ${type}`;
+      toast.innerHTML = msg;
+      container.appendChild(toast);
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, duration);
+    }
+
+    function completeWorkout(fromVideoEnd = false) {
+      if (player && typeof player.pauseVideo === 'function') {
+        try { player.pauseVideo(); } catch (e) {}
+      }
+      updateMasterPlayButtonUI(false);
+      setWorkoutRunning(false);
+
+      fetch('/api/workout/finish', { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+          if (res && res.saved) {
+            showToast(`🏆 Workout Saved to History (ID #${res.ride_id || 'saved'})!`, 'success');
+          } else {
+            showToast('🏆 Workout Completed!', 'success');
+          }
+          showSummary(res);
+        })
+        .catch(() => {
+          showToast('🏆 Workout Completed!', 'success');
+          showSummary();
+        });
+    }
+
+    function showSummary(saveInfo) {
+      const d = scaleIfOldServer(latestSnapshot || {});
+      const elapsed = (saveInfo && saveInfo.elapsed_sec !== undefined) ? saveInfo.elapsed_sec : (d.elapsed_sec || 0);
       const mins = Math.floor(elapsed / 60);
       const secs = elapsed % 60;
       document.getElementById('sum-duration').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-      document.getElementById('sum-distance').textContent = isImperial ? `${d.distance_mi.toFixed(2)} mi` : `${d.distance_km.toFixed(2)} km`;
-      document.getElementById('sum-calories').textContent = `${d.calories || 0} kcal`;
-      document.getElementById('sum-hr').textContent = `${d.avg_hr || '—'} / ${d.max_hr || '—'} BPM`;
-      document.getElementById('sum-cad').textContent = `${d.avg_cadence || '—'} / ${d.max_cadence || '—'} RPM`;
-      const avgS = isImperial ? d.avg_speed_mph : d.avg_speed_kmh;
-      const maxS = isImperial ? d.max_speed_mph : d.max_speed_kmh;
+
+      const distMi = (saveInfo && saveInfo.distance_mi !== undefined) ? saveInfo.distance_mi : (d.distance_mi || 0);
+      const distKm = (saveInfo && saveInfo.distance_km !== undefined) ? saveInfo.distance_km : (d.distance_km || 0);
+      document.getElementById('sum-distance').textContent = isImperial ? `${Number(distMi).toFixed(2)} mi` : `${Number(distKm).toFixed(2)} km`;
+
+      const cals = (saveInfo && saveInfo.calories !== undefined) ? saveInfo.calories : (d.calories || 0);
+      document.getElementById('sum-calories').textContent = `${cals} kcal`;
+
+      const avgHR = (saveInfo && saveInfo.avg_hr !== undefined) ? saveInfo.avg_hr : d.avg_hr;
+      const maxHR = (saveInfo && saveInfo.max_hr !== undefined) ? saveInfo.max_hr : d.max_hr;
+      document.getElementById('sum-hr').textContent = `${avgHR || '—'} / ${maxHR || '—'} BPM`;
+
+      const avgCad = (saveInfo && saveInfo.avg_cadence !== undefined) ? saveInfo.avg_cadence : d.avg_cadence;
+      const maxCad = (saveInfo && saveInfo.max_cadence !== undefined) ? saveInfo.max_cadence : d.max_cadence;
+      document.getElementById('sum-cad').textContent = `${avgCad || '—'} / ${maxCad || '—'} RPM`;
+
+      const avgS = isImperial ? ((saveInfo && saveInfo.avg_speed_mph !== undefined) ? saveInfo.avg_speed_mph : d.avg_speed_mph) : ((saveInfo && saveInfo.avg_speed_kmh !== undefined) ? saveInfo.avg_speed_kmh : d.avg_speed_kmh);
+      const maxS = isImperial ? ((saveInfo && saveInfo.max_speed_mph !== undefined) ? saveInfo.max_speed_mph : d.max_speed_mph) : ((saveInfo && saveInfo.max_speed_kmh !== undefined) ? saveInfo.max_speed_kmh : d.max_speed_kmh);
       const u = isImperial ? 'MPH' : 'KM/H';
-      document.getElementById('sum-spd').textContent = `${avgS !== null ? avgS.toFixed(1) : '—'} / ${maxS !== null ? maxS.toFixed(1) : '—'} ${u}`;
-      document.getElementById('sum-power').textContent = `${d.avg_watts || '—'} / ${d.max_watts || '—'} W`;
-      document.getElementById('sum-wkg').textContent = `${d.avg_w_kg ? d.avg_w_kg.toFixed(1) : '—'} W/kg`;
+      document.getElementById('sum-spd').textContent = `${avgS !== null && avgS !== undefined ? Number(avgS).toFixed(1) : '—'} / ${maxS !== null && maxS !== undefined ? Number(maxS).toFixed(1) : '—'} ${u}`;
+
+      const avgW = (saveInfo && saveInfo.avg_watts !== undefined) ? saveInfo.avg_watts : d.avg_watts;
+      const maxW = (saveInfo && saveInfo.max_watts !== undefined) ? saveInfo.max_watts : d.max_watts;
+      document.getElementById('sum-power').textContent = `${avgW || '—'} / ${maxW || '—'} W`;
+      document.getElementById('sum-wkg').textContent = `${d.avg_w_kg ? Number(d.avg_w_kg).toFixed(1) : '—'} W/kg`;
+
+      const banner = document.getElementById('summary-saved-banner');
+      const sub = document.getElementById('summary-saved-subtitle');
+      if (banner) {
+        if (saveInfo && saveInfo.saved) {
+          banner.style.display = 'flex';
+          if (sub) sub.textContent = saveInfo.ride_id ? `Saved to Ride History (SQLite ID #${saveInfo.ride_id}) with 1Hz telemetry.` : `Saved to local SQLite database (spin_hud.db).`;
+        } else if (elapsed >= 5) {
+          banner.style.display = 'flex';
+          if (sub) sub.textContent = `Saved to local SQLite database (spin_hud.db) with 1Hz telemetry.`;
+        } else {
+          banner.style.display = 'none';
+        }
+      }
+
       document.getElementById('summary-modal').classList.add('open');
     }
 
@@ -2723,6 +2944,8 @@
           const isOpen = controlsMenu.classList.toggle('open');
           menuToggle.classList.toggle('active', isOpen);
         }
+      } else if (e.code === 'KeyC') {
+        completeWorkout(false);
       } else if (e.code === 'KeyS') {
         const sm = document.getElementById('summary-modal');
         if (sm.classList.contains('open')) closeSummary(); else showSummary();
@@ -2932,9 +3155,58 @@
       timerToggleBtn.onclick = toggleMasterPlayPause;
     }
 
+    const btnFinish = document.getElementById('btn-finish-workout');
+    if (btnFinish) btnFinish.onclick = () => completeWorkout(false);
+
+    const btnFinishMenu = document.getElementById('btn-finish-menu');
+    if (btnFinishMenu) {
+      btnFinishMenu.onclick = () => {
+        const controlsMenu = document.getElementById('controls-dropdown-menu');
+        const menuToggle = document.getElementById('btn-menu-toggle');
+        if (controlsMenu) controlsMenu.classList.remove('open');
+        if (menuToggle) menuToggle.classList.remove('active');
+        completeWorkout(false);
+      };
+    }
+
     document.getElementById('btn-reset-timer').onclick = () => {
-      fetch('/api/workout/reset', { method: 'POST' });
+      const wasActive = latestSnapshot && latestSnapshot.elapsed_sec >= 5;
+      fetch('/api/workout/reset', { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+          if (res && res.saved) {
+            showToast(`💾 Workout auto-saved (ID #${res.ride_id || 'saved'}) & session reset!`, 'success');
+          } else if (wasActive) {
+            showToast('↺ Workout reset to 0:00', 'info');
+          } else {
+            showToast('↺ Session reset to 0:00', 'info');
+          }
+        })
+        .catch(() => {
+          showToast('↺ Session reset to 0:00', 'info');
+        });
     };
+
+    document.getElementById('btn-close-summary').onclick = closeSummary;
+    document.getElementById('btn-done-summary').onclick = closeSummary;
+
+    const btnViewHist = document.getElementById('btn-view-history-from-sum');
+    if (btnViewHist) {
+      btnViewHist.onclick = () => {
+        closeSummary();
+        loadHistory();
+        historyModal.classList.add('open');
+      };
+    }
+
+    const btnLaunchFromSum = document.getElementById('btn-launcher-from-sum');
+    if (btnLaunchFromSum) {
+      btnLaunchFromSum.onclick = () => {
+        fetch('/api/workout/reset', { method: 'POST' }).finally(() => {
+          window.location.href = '/launcher';
+        });
+      };
+    }
 
     document.getElementById('unit-toggle').onclick = () => {
       isImperial = !isImperial;
