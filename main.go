@@ -24,7 +24,7 @@ import (
 	"spin-hud/internal/strava"
 )
 
-//go:embed web/index.html
+//go:embed web/index.html web/launcher.html
 var webFS embed.FS
 
 func generatePIN() string {
@@ -106,6 +106,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("embedded UI missing: %v", err)
 	}
+	launcherHTML, err := webFS.ReadFile("web/launcher.html")
+	if err != nil {
+		log.Fatalf("embedded launcher missing: %v", err)
+	}
 
 	exePath, exeErr := os.Executable()
 	base := "."
@@ -129,12 +133,12 @@ func main() {
 		filepath.Join(base, "strava-tokens.json"),
 		fmt.Sprintf("http://localhost:%d/api/strava/callback", *port),
 	)
-	srv := server.New(state, string(indexHTML), sc, database, lanPIN)
+	srv := server.New(state, string(indexHTML), string(launcherHTML), sc, database, lanPIN)
 
 	listener, err := server.Listen(host, *port)
 	if err != nil {
 		if isAddrInUse(err) {
-			url := fmt.Sprintf("http://localhost:%d", *port)
+			url := fmt.Sprintf("http://localhost:%d/launcher", *port)
 			fmt.Println("========================================================")
 			fmt.Printf("  [INFO] Spin Studio is already running at %s\n", url)
 			fmt.Println("  Opening active session in your browser...")
@@ -153,7 +157,7 @@ func main() {
 	} else if host != "127.0.0.1" {
 		displayHost = host
 	}
-	url := fmt.Sprintf("http://%s:%d", displayHost, *port)
+	url := fmt.Sprintf("http://%s:%d/launcher", displayHost, *port)
 	fmt.Println("========================================================")
 	fmt.Printf("  SPIN STUDIO LIVE: %s\n", url)
 	if *lan {

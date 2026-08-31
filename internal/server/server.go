@@ -27,26 +27,28 @@ var (
 )
 
 type Server struct {
-	State     *session.State
-	indexHTML string
-	Strava    *strava.Client
-	DB        *db.DB
-	LANPIN    string
+	State        *session.State
+	indexHTML    string
+	launcherHTML string
+	Strava       *strava.Client
+	DB           *db.DB
+	LANPIN       string
 
 	hubMu          sync.Mutex
 	subscribers    map[chan []byte]struct{}
 	lastSavedStart time.Time
 }
 
-// New builds the HTTP handler set; indexHTML is the embedded UI.
-func New(state *session.State, indexHTML string, sc *strava.Client, database *db.DB, lanPIN string) *Server {
+// New builds the HTTP handler set; indexHTML is the embedded UI, launcherHTML is the start page.
+func New(state *session.State, indexHTML, launcherHTML string, sc *strava.Client, database *db.DB, lanPIN string) *Server {
 	s := &Server{
-		State:       state,
-		indexHTML:   indexHTML,
-		Strava:      sc,
-		DB:          database,
-		LANPIN:      lanPIN,
-		subscribers: make(map[chan []byte]struct{}),
+		State:        state,
+		indexHTML:    indexHTML,
+		launcherHTML: launcherHTML,
+		Strava:       sc,
+		DB:           database,
+		LANPIN:       lanPIN,
+		subscribers:  make(map[chan []byte]struct{}),
 	}
 	go s.runBroadcaster()
 	return s
@@ -120,6 +122,7 @@ func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
+	mux.HandleFunc("/launcher", s.handleLauncher)
 	mux.HandleFunc("/api/telemetry", s.handleTelemetry)
 	mux.HandleFunc("/api/workout/export.tcx", s.handleTCXExport)
 	mux.HandleFunc("/api/workout/export.fit", s.handleFITExport)
@@ -165,10 +168,30 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	rendered := strings.ReplaceAll(html, "__PLAYLIST_ID__", s.State.PlaylistID)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Expires", "0")
-	fmt.Fprint(w, rendered)
+	w.Write([]byte(rendered))
+}
+
+func (s *Server) handleLauncher(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/launcher" && !strings.HasPrefix(r.URL.Path, "/launcher.html") {
+		http.NotFound(w, r)
+		return
+	}
+	html := s.launcherHTML
+	if data, err := os.ReadFile("web/launcher.html"); err == nil && len(data) > 0 {
+		html = string(data)
+	}
+	lanOn := "false"
+	pin := ""
+	if s.LANPIN != "" {
+		lanOn = "true"
+		pin = s.LANPIN
+	}
+	rendered := strings.ReplaceAll(html, "__LAN__", lanOn)
+	rendered = strings.ReplaceAll(rendered, "__PIN__", pin)
+	rendered = strings.ReplaceAll(rendered, "__PLAYLIST_ID__", s.State.PlaylistID)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(rendered))
 }
 
 func (s *Server) handleAuthPIN(w http.ResponseWriter, r *http.Request) {

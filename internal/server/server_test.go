@@ -18,13 +18,11 @@ import (
 func setupTestServer(t *testing.T, lanPIN string) (*Server, *db.DB, *session.State) {
 	st := session.NewState(session.DefaultPlaylistID)
 	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "server_test.db")
-	database, err := db.Open(dbPath)
+	database, err := db.Open(filepath.Join(tmpDir, "test.db"))
 	if err != nil {
 		t.Fatalf("failed to open test db: %v", err)
 	}
-
-	srv := New(st, "<html><body>Test</body></html>", nil, database, lanPIN)
+	srv := New(st, "<html><body>Test</body></html>", "<html><body>Launcher</body></html>", nil, database, lanPIN)
 	return srv, database, st
 }
 
@@ -220,3 +218,47 @@ func TestPauseDoesNotDuplicateHistory(t *testing.T) {
 	}
 }
 
+func TestLauncherModeInjection(t *testing.T) {
+	st := session.NewState(session.DefaultPlaylistID)
+	tmpDir := t.TempDir()
+	database, err := db.Open(filepath.Join(tmpDir, "launcher_test.db"))
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+	defer database.Close()
+
+	launcherHTML := `<html data-lan="__LAN__" data-pin="__PIN__" data-pl="__PLAYLIST_ID__"></html>`
+
+	// 1. Local Mode (no PIN)
+	srvLocal := New(st, "<html>HUD</html>", launcherHTML, nil, database, "")
+	rec := httptest.NewRecorder()
+	srvLocal.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/launcher", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /launcher local status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `data-lan="false"`) {
+		t.Errorf("expected data-lan=false in local mode, got: %s", body)
+	}
+	if !strings.Contains(body, `data-pin=""`) {
+		t.Errorf("expected empty pin in local mode, got: %s", body)
+	}
+	if !strings.Contains(body, fmt.Sprintf(`data-pl="%s"`, session.DefaultPlaylistID)) {
+		t.Errorf("expected playlist ID injected, got: %s", body)
+	}
+
+	// 2. LAN Mode (with PIN)
+	srvLAN := New(st, "<html>HUD</html>", launcherHTML, nil, database, "482910")
+	recLAN := httptest.NewRecorder()
+	srvLAN.Handler().ServeHTTP(recLAN, httptest.NewRequest(http.MethodGet, "/launcher", nil))
+	if recLAN.Code != http.StatusOK {
+		t.Fatalf("GET /launcher LAN status = %d", recLAN.Code)
+	}
+	bodyLAN := recLAN.Body.String()
+	if !strings.Contains(bodyLAN, `data-lan="true"`) {
+		t.Errorf("expected data-lan=true in LAN mode, got: %s", bodyLAN)
+	}
+	if !strings.Contains(bodyLAN, `data-pin="482910"`) {
+		t.Errorf("expected pin 482910 in LAN mode, got: %s", bodyLAN)
+	}
+}

@@ -2152,7 +2152,25 @@
     }
 
     function onPlayerReady(event) {
-      event.target.playVideo();
+      const params = new URLSearchParams(location.search);
+      const startVideo = params.get('video');
+
+      if (startVideo && event.target.getPlaylist && event.target.playVideoAt) {
+        const pl = event.target.getPlaylist();
+        if (pl && pl.length) {
+          const idx = pl.indexOf(startVideo);
+          if (idx >= 0) {
+            event.target.playVideoAt(idx);
+            event.target.playVideo();
+          } else if (event.target.loadVideoById) {
+            event.target.loadVideoById(startVideo);
+          }
+        } else if (event.target.loadVideoById) {
+          event.target.loadVideoById(startVideo);
+        }
+      } else {
+        event.target.playVideo();
+      }
       updateVideoTitle();
       setTimeout(renderPlaylist, 1000);
     }

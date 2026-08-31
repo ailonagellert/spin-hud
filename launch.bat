@@ -9,7 +9,19 @@ echo.
 
 cd /d "%~dp0"
 
-:: 1. Detect Python
+:: 1. Prefer compiled Go binary if present
+if exist "%~dp0spin-hud.exe" (
+    echo [INFO] Launching Spin Studio (compiled native)...
+    "%~dp0spin-hud.exe" %*
+    if !ERRORLEVEL! neq 0 (
+        echo.
+        echo [INFO] Spin Studio exited with code !ERRORLEVEL!.
+        pause
+    )
+    exit /b !ERRORLEVEL!
+)
+
+:: 2. Detect Python fallback
 where python >nul 2>nul
 if %ERRORLEVEL% equ 0 (
     set "PY_CMD=python"
@@ -30,7 +42,7 @@ pause
 exit /b 1
 
 :check_deps
-:: 2. Check and auto-install bleak dependency
+:: 3. Check and auto-install bleak dependency
 %PY_CMD% -c "import bleak" >nul 2>nul
 if errorlevel 1 (
     echo [INFO] Installing required Bluetooth library bleak...
@@ -44,7 +56,7 @@ if errorlevel 1 (
     echo.
 )
 
-:: 3. Launch Spin Studio
+:: 4. Launch Spin Studio Python
 echo [INFO] Launching Spin Studio Web HUD and BLE Engine...
 %PY_CMD% "%~dp0spin_hud.py" %*
 

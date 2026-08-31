@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spin Studio — Workout Launcher</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #07090e;
+      --bg-card: rgba(18, 22, 34, 0.85);
+      --bg-card-hover: rgba(28, 35, 52, 0.95);
+      --bg-card-selected: rgba(0, 229, 255, 0.08);
+      --border-card: rgba(255, 255, 255, 0.07);
+      --border-card-hover: rgba(0, 229, 255, 0.35);
+      --border-card-selected: #00e5ff;
+      --accent-cyan: #00e5ff;
+      --accent-purple: #a855f7;
+      --accent-green: #10b981;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 50% 0%, #151a2e 0%, #07090e 70%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 24px 60px;
+      overflow-x: hidden;
+      user-select: none;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1180px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    /* Top Brand Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, #00e5ff, #a855f7);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.4);
+    }
+
+    .brand-logo svg {
+      width: 24px;
+      height: 24px;
+      fill: #000;
+    }
+
+    .brand-title {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      background: linear-gradient(90deg, #fff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-subtitle {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .header-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-card);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header-badge .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 10px var(--accent-green);
+    }
+
+    /* Mode Selection Banner */
+    .mode-section {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .section-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mode-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .mode-card {
+      background: var(--bg-card);
+      border: 1.5px solid var(--border-card);
+      border-radius: 16px;
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      transition: all 0.25s ease;
+      position: relative;
+      backdrop-filter: blur(12px);
+    }
+
+    .mode-card.active.mode-local {
+      border-color: var(--accent-cyan);
+      background: rgba(0, 229, 255, 0.05);
+      box-shadow: 0 0 24px rgba(0, 229, 255, 0.15);
+    }
+
+    .mode-card.active.mode-lan {
+      border-color: var(--accent-purple);
+      background: rgba(168, 85, 247, 0.06);
+      box-shadow: 0 0 24px rgba(168, 85, 247, 0.18);
+    }
+
+    .mode-card.inactive {
+      opacity: 0.45;
+      filter: grayscale(0.6);
+    }
+
+    .mode-icon-box {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .mode-local .mode-icon-box {
+      background: rgba(0, 229, 255, 0.12);
+      color: var(--accent-cyan);
+    }
+
+    .mode-lan .mode-icon-box {
+      background: rgba(168, 85, 247, 0.15);
+      color: var(--accent-purple);
+    }
+
+    .mode-info {
+      flex: 1;
+    }
+
+    .mode-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .mode-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .mode-status-tag {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+
+    .mode-local .mode-status-tag {
+      background: rgba(0, 229, 255, 0.18);
+      color: var(--accent-cyan);
+    }
+
+    .mode-lan .mode-status-tag {
+      background: rgba(168, 85, 247, 0.22);
+      color: var(--accent-purple);
+    }
+
+    .mode-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .mode-pin-pill {
+      margin-top: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent-purple);
+      background: rgba(168, 85, 247, 0.14);
+      padding: 4px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+    }
+
+    /* Playlist Section */
+    .playlist-section {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .playlist-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .playlist-count-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      background: rgba(0, 229, 255, 0.1);
+      padding: 4px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(0, 229, 255, 0.2);
+    }
+
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .video-card {
+      background: var(--bg-card);
+      border: 1.5px solid var(--border-card);
+      border-radius: 14px;
+      overflow: hidden;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      backdrop-filter: blur(8px);
+    }
+
+    .video-card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-card-hover);
+      transform: translateY(-3px);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .video-card.selected {
+      border-color: var(--accent-cyan);
+      background: var(--bg-card-selected);
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.22), 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .thumb-wrapper {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #000;
+      overflow: hidden;
+    }
+
+    .thumb-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.35s ease;
+    }
+
+    .video-card:hover .thumb-img {
+      transform: scale(1.05);
+    }
+
+    .thumb-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(7, 9, 14, 0.9) 0%, transparent 60%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .video-card:hover .thumb-overlay {
+      opacity: 1;
+    }
+
+    .play-btn-circle {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: rgba(0, 229, 255, 0.9);
+      color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 16px rgba(0, 229, 255, 0.6);
+      transform: scale(0.85);
+      transition: transform 0.2s ease;
+    }
+
+    .video-card:hover .play-btn-circle {
+      transform: scale(1);
+    }
+
+    .track-index-badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      z-index: 2;
+    }
+
+    .selected-check-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      color: #000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.8);
+      z-index: 2;
+    }
+
+    .video-card.selected .selected-check-badge {
+      display: flex;
+    }
+
+    .video-details {
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+      justify-content: space-between;
+    }
+
+    .video-title {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: #f1f5f9;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-height: 38px;
+    }
+
+    .video-card.selected .video-title {
+      color: var(--accent-cyan);
+    }
+
+    .card-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 4px;
+    }
+
+    .track-tag {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-muted);
+    }
+
+    .btn-preview-sm {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: color 0.15s;
+    }
+
+    .btn-preview-sm:hover {
+      color: var(--accent-cyan);
+    }
+
+    /* Action Hero Bar */
+    .action-bar {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .btn-start-hero {
+      width: 100%;
+      max-width: 520px;
+      height: 56px;
+      border-radius: 16px;
+      border: none;
+      background: linear-gradient(135deg, #00e5ff 0%, #0284c7 100%);
+      color: #000;
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      box-shadow: 0 0 30px rgba(0, 229, 255, 0.4), 0 8px 24px rgba(0, 0, 0, 0.5);
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .btn-start-hero:hover {
+      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 0 45px rgba(0, 229, 255, 0.6), 0 12px 30px rgba(0, 0, 0, 0.6);
+      background: linear-gradient(135deg, #38bdf8 0%, #00e5ff 100%);
+    }
+
+    .btn-start-hero:active {
+      transform: translateY(1px) scale(0.99);
+    }
+
+    .btn-start-hero svg {
+      width: 22px;
+      height: 22px;
+      fill: currentColor;
+    }
+
+    .action-hint {
+      font-size: 13px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .action-hint a {
+      color: var(--text-muted);
+      text-decoration: none;
+      border-bottom: 1px dashed var(--text-dim);
+      padding-bottom: 2px;
+      transition: color 0.15s;
+    }
+
+    .action-hint a:hover {
+      color: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+    }
+
+    /* Preview Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(12px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 24px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-box {
+      width: 100%;
+      max-width: 780px;
+      background: #0f131f;
+      border: 1.5px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(0, 229, 255, 0.15);
+      display: flex;
+      flex-direction: column;
+      animation: modalPop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes modalPop {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .modal-video-wrap {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #000;
+    }
+
+    .modal-video-wrap iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    .modal-footer {
+      padding: 18px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.02);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .modal-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-width: 60%;
+    }
+
+    .modal-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .modal-sub {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--accent-cyan);
+    }
+
+    .modal-buttons {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn-modal-secondary {
+      padding: 10px 18px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+      border: none;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-modal-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .btn-modal-primary {
+      padding: 10px 22px;
+      border-radius: 10px;
+      background: var(--accent-cyan);
+      color: #000;
+      border: none;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      box-shadow: 0 0 16px rgba(0, 229, 255, 0.4);
+      transition: background 0.15s;
+    }
+
+    .btn-modal-primary:hover {
+      background: #38bdf8;
+    }
+
+    /* Skeleton Loading Cards */
+    .skeleton-card {
+      background: var(--bg-card);
+      border: 1.5px solid var(--border-card);
+      border-radius: 14px;
+      overflow: hidden;
+      aspect-ratio: 16 / 13;
+      display: flex;
+      flex-direction: column;
+      animation: pulse 1.5s infinite ease-in-out;
+    }
+
+    .skeleton-thumb {
+      width: 100%;
+      height: 60%;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .skeleton-body {
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .skeleton-line {
+      height: 12px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 4px;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 0.3; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Brand Header -->
+    <header>
+      <div class="brand">
+        <div class="brand-logo">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title">SPIN STUDIO</div>
+          <div class="brand-subtitle">Session Launcher & Workout Picker</div>
+        </div>
+      </div>
+      <div class="header-badge">
+        <span class="dot"></span>
+        <span id="sessionStatusText">Ready for Workout</span>
+      </div>
+    </header>
+
+    <!-- Launch Mode Card -->
+    <div class="mode-section">
+      <div class="section-label">
+        <svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        Active Operating Mode
+      </div>
+      <div class="mode-grid">
+        <!-- Local Mode -->
+        <div class="mode-card mode-local" id="cardLocal">
+          <div class="mode-icon-box">
+            <svg style="width:24px;height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+          </div>
+          <div class="mode-info">
+            <div class="mode-title-row">
+              <div class="mode-title">Local Solo Mode</div>
+              <span class="mode-status-tag" id="tagLocal">Active</span>
+            </div>
+            <div class="mode-desc">Direct BLE sensors connected to this screen. Low latency localhost server.</div>
+          </div>
+        </div>
+
+        <!-- LAN Mode -->
+        <div class="mode-card mode-lan" id="cardLan">
+          <div class="mode-icon-box">
+            <svg style="width:24px;height:24px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
+            </svg>
+          </div>
+          <div class="mode-info">
+            <div class="mode-title-row">
+              <div class="mode-title">LAN Remote Mode</div>
+              <span class="mode-status-tag" id="tagLan">Active</span>
+            </div>
+            <div class="mode-desc">Broadcasts telemetry & controls across your local network for phones and tablets.</div>
+            <div class="mode-pin-pill" id="pinPill" style="display:none;">
+              <svg style="width:12px;height:12px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              <span>Pairing PIN: <strong id="pinValue">------</strong></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Playlist Section -->
+    <div class="playlist-section">
+      <div class="playlist-header-row">
+        <div class="section-label">
+          <svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+          Select Starting Workout Track
+        </div>
+        <div class="playlist-count-badge" id="videoCount">Loading Playlist Tracks...</div>
+      </div>
+
+      <!-- Video Grid -->
+      <div class="video-grid" id="videoGrid">
+        <!-- Skeletons while loading -->
+        <div class="skeleton-card"><div class="skeleton-thumb"></div><div class="skeleton-body"><div class="skeleton-line" style="width:80%"></div><div class="skeleton-line" style="width:40%"></div></div></div>
+        <div class="skeleton-card"><div class="skeleton-thumb"></div><div class="skeleton-body"><div class="skeleton-line" style="width:75%"></div><div class="skeleton-line" style="width:50%"></div></div></div>
+        <div class="skeleton-card"><div class="skeleton-thumb"></div><div class="skeleton-body"><div class="skeleton-line" style="width:90%"></div><div class="skeleton-line" style="width:35%"></div></div></div>
+        <div class="skeleton-card"><div class="skeleton-thumb"></div><div class="skeleton-body"><div class="skeleton-line" style="width:70%"></div><div class="skeleton-line" style="width:60%"></div></div></div>
+      </div>
+    </div>
+
+    <!-- Action Bar -->
+    <div class="action-bar">
+      <button class="btn-start-hero" id="btnStartWorkout">
+        <svg viewBox="0 0 24 24">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        <span id="btnStartText">Start Workout Session</span>
+      </button>
+      <div class="action-hint">
+        <span>Click a ride card to select • Double-click to start immediately</span>
+        <span>•</span>
+        <a href="/" id="btnSkipToHud">Direct HUD (Resume Active)</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview Modal -->
+  <div class="modal-backdrop" id="previewModal" onclick="onModalBackdropClick(event)">
+    <div class="modal-box">
+      <div class="modal-video-wrap">
+        <iframe id="previewIframe" src="" allow="autoplay; fullscreen"></iframe>
+      </div>
+      <div class="modal-footer">
+        <div class="modal-info">
+          <div class="modal-title" id="modalVideoTitle">Workout Preview</div>
+          <div class="modal-sub" id="modalTrackIdx">Track #1</div>
+        </div>
+        <div class="modal-buttons">
+          <button class="btn-modal-secondary" onclick="closePreviewModal()">Close</button>
+          <button class="btn-modal-primary" id="btnModalStart">Select & Start</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden helper player container to inspect the real YouTube playlist -->
+  <div id="yt-playlist-helper" style="position:fixed; top:-9999px; left:-9999px; width:1px; height:1px; opacity:0.01; pointer-events:none;"></div>
+
+  <!-- YouTube IFrame API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+
+  <script>
+    const IS_LAN = ("__LAN__" === "true");
+    const LAN_PIN = "__PIN__";
+    const PLAYLIST_ID = "__PLAYLIST_ID__".startsWith("__") ? "PLBE6A702D02AB879D" : "__PLAYLIST_ID__";
+
+    let playlistVideos = [];
+    let selectedVideoIndex = 0;
+    let helperPlayer = null;
+    let helperTimedOut = false;
+
+    // Apply Mode Display
+    function initModeDisplay() {
+      const cardLocal = document.getElementById('cardLocal');
+      const cardLan = document.getElementById('cardLan');
+      const tagLocal = document.getElementById('tagLocal');
+      const tagLan = document.getElementById('tagLan');
+      const pinPill = document.getElementById('pinPill');
+      const pinValue = document.getElementById('pinValue');
+
+      if (IS_LAN) {
+        cardLocal.classList.remove('active');
+        cardLocal.classList.add('inactive');
+        tagLocal.style.display = 'none';
+
+        cardLan.classList.add('active');
+        cardLan.classList.remove('inactive');
+        tagLan.style.display = 'inline-block';
+
+        pinPill.style.display = 'inline-flex';
+        pinValue.textContent = LAN_PIN || '--';
+      } else {
+        cardLocal.classList.add('active');
+        cardLocal.classList.remove('inactive');
+        tagLocal.style.display = 'inline-block';
+
+        cardLan.classList.remove('active');
+        cardLan.classList.add('inactive');
+        tagLan.style.display = 'none';
+        pinPill.style.display = 'none';
+      }
+    }
+
+    // YouTube Iframe API Ready Callback
+    function onYouTubeIframeAPIReady() {
+      helperPlayer = new YT.Player('yt-playlist-helper', {
+        height: '1',
+        width: '1',
+        playerVars: {
+          listType: 'playlist',
+          list: PLAYLIST_ID,
+          autoplay: 0,
+          controls: 0
+        },
+        events: {
+          'onReady': onHelperReady,
+          'onError': onHelperError
+        }
+      });
+    }
+
+    function onHelperReady(event) {
+      if (helperTimedOut) return;
+      try {
+        const pl = event.target.getPlaylist();
+        if (pl && pl.length > 0) {
+          loadPlaylistTracks(pl);
+          return;
+        }
+      } catch (e) {
+        console.warn('Could not extract playlist items from YouTube player:', e);
+      }
+      fallbackPlaylist();
+    }
+
+    function onHelperError(event) {
+      console.warn('YouTube helper player error:', event);
+      if (!playlistVideos.length) {
+        fallbackPlaylist();
+      }
+    }
+
+    // Fallback if YouTube API doesn't resolve in 3.5s
+    setTimeout(() => {
+      if (!playlistVideos.length) {
+        helperTimedOut = true;
+        fallbackPlaylist();
+      }
+    }, 3500);
+
+    function fallbackPlaylist() {
+      if (playlistVideos.length) return;
+      // Default Spin playlist videos if offline or slow
+      const defaultIds = [
+        '4Ek31_3PMW4', 'V-HmspieYjE', 'kJQP7kiw5Fk',
+        'JGwWNGJdvx8', 'oHg5SJYRHA0', 'RgKAFK5djSk'
+      ];
+      loadPlaylistTracks(defaultIds);
+    }
+
+    function loadPlaylistTracks(videoIds) {
+      playlistVideos = videoIds.map((id, idx) => ({
+        id: id,
+        index: idx,
+        title: `Workout Track ${idx + 1}`,
+        thumbnail: `https://img.youtube.com/vi/${id}/mqdefault.jpg`,
+        loaded: false
+      }));
+
+      renderVideoGrid();
+      document.getElementById('videoCount').textContent = `${playlistVideos.length} Playlist Videos`;
+      selectTrack(0);
+
+      // Asynchronously fetch real titles
+      playlistVideos.forEach((vid, idx) => {
+        fetch('/api/youtube/title?id=' + encodeURIComponent(vid.id))
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.title) {
+              vid.title = data.title;
+              vid.loaded = true;
+              updateCardTitle(idx, data.title);
+              if (selectedVideoIndex === idx) {
+                updateStartButtonText();
+              }
+            }
+          })
+          .catch(() => {
+            // Keep default title
+          });
+      });
+    }
+
+    function renderVideoGrid() {
+      const grid = document.getElementById('videoGrid');
+      grid.innerHTML = '';
+
+      playlistVideos.forEach((vid, idx) => {
+        const card = document.createElement('div');
+        card.className = 'video-card' + (idx === selectedVideoIndex ? ' selected' : '');
+        card.id = `video-card-${idx}`;
+        card.onclick = (e) => {
+          selectTrack(idx);
+        };
+        card.ondblclick = (e) => {
+          selectTrack(idx);
+          startSelectedWorkout();
+        };
+
+        card.innerHTML = `
+          <div class="thumb-wrapper">
+            <span class="track-index-badge">#${idx + 1}</span>
+            <div class="selected-check-badge">
+              <svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </div>
+            <img class="thumb-img" src="${vid.thumbnail}" alt="${vid.title}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 9%22><rect fill=%22%23121622%22 width=%2216%22 height=%229%22/></svg>'">
+            <div class="thumb-overlay">
+              <div class="play-btn-circle" onclick="event.stopPropagation(); openPreviewModal(${idx});" title="Preview Video">
+                <svg style="width:18px;height:18px;margin-left:2px;" viewBox="0 0 24 24">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div class="video-details">
+            <div class="video-title" id="card-title-${idx}">${vid.title}</div>
+            <div class="card-footer">
+              <span class="track-tag">Spin Track</span>
+              <button class="btn-preview-sm" onclick="event.stopPropagation(); openPreviewModal(${idx});">
+                <svg style="width:13px;height:13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>
+                </svg>
+                Preview
+              </button>
+            </div>
+          </div>
+        `;
+
+        grid.appendChild(card);
+      });
+    }
+
+    function updateCardTitle(idx, title) {
+      const el = document.getElementById(`card-title-${idx}`);
+      if (el) el.textContent = title;
+    }
+
+    function selectTrack(idx) {
+      selectedVideoIndex = idx;
+      document.querySelectorAll('.video-card').forEach((c, i) => {
+        if (i === idx) {
+          c.classList.add('selected');
+        } else {
+          c.classList.remove('selected');
+        }
+      });
+      updateStartButtonText();
+    }
+
+    function updateStartButtonText() {
+      const btnText = document.getElementById('btnStartText');
+      if (playlistVideos[selectedVideoIndex]) {
+        const vid = playlistVideos[selectedVideoIndex];
+        btnText.textContent = `Start Workout (Track #${vid.index + 1}: ${vid.title})`;
+      } else {
+        btnText.textContent = 'Start Workout Session';
+      }
+    }
+
+    function startSelectedWorkout() {
+      if (playlistVideos[selectedVideoIndex]) {
+        const vid = playlistVideos[selectedVideoIndex];
+        window.location.href = `/?video=${encodeURIComponent(vid.id)}`;
+      } else {
+        window.location.href = '/';
+      }
+    }
+
+    // Modal Preview Handlers
+    function openPreviewModal(idx) {
+      const vid = playlistVideos[idx];
+      if (!vid) return;
+
+      document.getElementById('modalVideoTitle').textContent = vid.title;
+      document.getElementById('modalTrackIdx').textContent = `Track #${idx + 1} of ${playlistVideos.length}`;
+      document.getElementById('previewIframe').src = `https://www.youtube.com/embed/${vid.id}?autoplay=1`;
+      document.getElementById('previewModal').classList.add('open');
+
+      document.getElementById('btnModalStart').onclick = () => {
+        selectTrack(idx);
+        closePreviewModal();
+        startSelectedWorkout();
+      };
+    }
+
+    function closePreviewModal() {
+      document.getElementById('previewIframe').src = '';
+      document.getElementById('previewModal').classList.remove('open');
+    }
+
+    function onModalBackdropClick(event) {
+      if (event.target.id === 'previewModal') {
+        closePreviewModal();
+      }
+    }
+
+    // Start Button Listener
+    document.getElementById('btnStartWorkout').addEventListener('click', startSelectedWorkout);
+
+    // Initial Execution
+    initModeDisplay();
+  </script>
+</body>
+</html>
