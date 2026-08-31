@@ -1017,9 +1017,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
       display: flex;
       justify-content: center;
       align-items: stretch;
-      gap: 16px;
+      gap: 14px;
       width: 100%;
-      max-width: 1280px;
+      max-width: 1380px;
       margin: 0 auto;
     }
 
@@ -1030,12 +1030,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
       -webkit-backdrop-filter: blur(24px);
       border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 20px;
-      padding: 16px 20px;
+      padding: 14px 18px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       position: relative;
-      overflow: hidden;
+      overflow: visible;
       box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
       transition: transform 0.2s, border-color 0.3s;
     }
@@ -1047,6 +1047,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
       left: 0;
       right: 0;
       height: 3px;
+      border-radius: 20px 20px 0 0;
       background: transparent;
       transition: background 0.3s;
     }
@@ -1055,7 +1056,15 @@ INDEX_HTML = r"""<!DOCTYPE html>
     .telemetry-card.speed-card::before { background: linear-gradient(90deg, #38bdf8, transparent); }
     .telemetry-card.power-card::before { background: linear-gradient(90deg, #f59e0b, #eab308, transparent); }
     .telemetry-card.hr-card::before { background: linear-gradient(90deg, var(--hr-accent, #ff6d00), transparent); }
-    .telemetry-card.timer-card::before { background: linear-gradient(90deg, #a855f7, transparent); }
+    .telemetry-card.timer-card::before,
+    .telemetry-card.master-control-card::before { background: linear-gradient(90deg, #a855f7, #00e5ff, transparent); }
+
+    .telemetry-card.master-control-card {
+      flex: 1.45;
+      min-width: 320px;
+      padding: 12px 16px;
+      gap: 6px;
+    }
 
     /* Layout Variations: Left & Right Sidebar Stacks */
     .layout-left .telemetry-dock {
@@ -1094,14 +1103,6 @@ INDEX_HTML = r"""<!DOCTYPE html>
       width: 440px;
       min-width: 440px;
       max-width: 440px;
-      z-index: 45;
-    }
-    .layout-left .yt-container {
-      top: 76px;
-      right: 32px;
-      left: auto;
-      width: 420px;
-      max-width: 420px;
       z-index: 45;
     }
 
@@ -1143,15 +1144,6 @@ INDEX_HTML = r"""<!DOCTYPE html>
       max-width: 440px;
       z-index: 45;
     }
-    .layout-right .yt-container {
-      top: 76px;
-      left: 32px;
-      right: auto;
-      width: 420px;
-      max-width: 420px;
-      align-items: flex-start;
-      z-index: 45;
-    }
 
     .layout-left .telemetry-card,
     .layout-right .telemetry-card {
@@ -1161,6 +1153,13 @@ INDEX_HTML = r"""<!DOCTYPE html>
       min-height: 88px;
       max-height: 98px;
       gap: 2px;
+    }
+
+    .layout-left .telemetry-card.master-control-card,
+    .layout-right .telemetry-card.master-control-card {
+      min-height: 120px;
+      max-height: 130px;
+      padding: 8px 14px;
     }
 
     .layout-left .card-value,
@@ -1203,10 +1202,6 @@ INDEX_HTML = r"""<!DOCTYPE html>
         padding: 7px 12px;
         gap: 4px;
       }
-      .layout-left .yt-container,
-      .layout-right .yt-container {
-        top: 64px;
-      }
       .layout-left .telemetry-dock,
       .layout-right .telemetry-dock {
         top: 162px;
@@ -1219,6 +1214,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
         min-height: 74px;
         max-height: 84px;
         border-radius: 14px;
+      }
+      .layout-left .telemetry-card.master-control-card,
+      .layout-right .telemetry-card.master-control-card {
+        min-height: 104px;
+        max-height: 114px;
+        padding: 6px 12px;
       }
       .layout-left .card-value,
       .layout-right .card-value {
@@ -1254,10 +1255,6 @@ INDEX_HTML = r"""<!DOCTYPE html>
         padding: 5px 10px;
         gap: 3px;
       }
-      .layout-left .yt-container,
-      .layout-right .yt-container {
-        top: 52px;
-      }
       .layout-left .telemetry-dock,
       .layout-right .telemetry-dock {
         top: 138px;
@@ -1270,6 +1267,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
         min-height: 62px;
         max-height: 70px;
         border-radius: 12px;
+      }
+      .layout-left .telemetry-card.master-control-card,
+      .layout-right .telemetry-card.master-control-card {
+        min-height: 90px;
+        max-height: 98px;
+        padding: 4px 10px;
       }
       .layout-left .card-value,
       .layout-right .card-value {
@@ -1375,104 +1378,228 @@ INDEX_HTML = r"""<!DOCTYPE html>
       70% { transform: scale(1); }
     }
 
-    .yt-container {
-      position: absolute;
-      top: 90px;
-      right: 32px;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      max-width: 440px;
-      width: calc(100vw - 64px);
-      z-index: 50;
+    /* Master Control Card & Touch-Friendly Media Controls */
+    .status-pill {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
     }
 
-    .yt-quick-bar {
-      background: var(--glass-bg);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid var(--glass-border);
-      border-radius: 16px;
-      padding: 12px 18px;
+    .status-pill.active-session {
+      background: rgba(0, 229, 255, 0.15);
+      color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+    }
+
+    .status-pill.paused-session {
+      background: rgba(245, 158, 11, 0.2);
+      color: #f59e0b;
+    }
+
+    .btn-playlist-toggle {
+      background: rgba(0, 229, 255, 0.1);
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      color: var(--accent-cyan);
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+
+    .btn-playlist-toggle:hover {
+      background: rgba(0, 229, 255, 0.22);
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
+      transform: translateY(-1px);
+    }
+
+    .btn-playlist-toggle:active {
+      transform: scale(0.95);
+    }
+
+    .master-now-playing {
       display: flex;
       align-items: center;
-      gap: 12px;
-      width: 100%;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
-    }
-
-    .yt-icon {
-      color: #ff0000;
-      font-size: 24px;
-    }
-
-    .yt-info {
-      flex: 1;
+      gap: 8px;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 5px 10px;
       overflow: hidden;
     }
 
-    .yt-title {
-      font-size: 13px;
+    .yt-indicator-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .master-track-info {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      line-height: 1.2;
+    }
+
+    .master-track-title {
+      font-size: 12px;
       font-weight: 700;
+      color: #ffffff;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    .yt-sub {
-      font-size: 11px;
+    .master-track-sub {
+      font-size: 10px;
       color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    .yt-ctrls {
+    .master-main-row {
       display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .master-metric-group {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .master-timer-value {
+      font-size: 38px;
+      line-height: 1;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -1px;
+    }
+
+    .master-calories-badge {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent-orange);
+      font-family: 'JetBrains Mono', monospace;
+      margin-top: 2px;
+    }
+
+    .master-touch-controls {
+      display: flex;
+      align-items: center;
       gap: 8px;
     }
 
-    .yt-btn {
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid var(--glass-border);
+    .touch-btn {
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.08);
       color: #fff;
-      border-radius: 12px;
-      padding: 10px 14px;
-      min-width: 44px;
-      min-height: 44px;
-      font-size: 15px;
-      font-weight: 700;
+      border-radius: 14px;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      transition: transform 0.15s ease, background 0.2s;
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
 
-    .yt-btn:hover {
-      background: rgba(255, 255, 255, 0.25);
-      transform: scale(1.06);
+    .touch-btn-nav,
+    .touch-btn-reset {
+      width: 46px;
+      height: 46px;
+      min-width: 46px;
+      min-height: 46px;
     }
 
-    .yt-btn:active {
-      transform: scale(0.92);
-      background: rgba(255, 255, 255, 0.4);
+    .touch-btn-nav:hover,
+    .touch-btn-reset:hover {
+      background: rgba(255, 255, 255, 0.22);
+      border-color: rgba(255, 255, 255, 0.35);
+      transform: translateY(-2px) scale(1.05);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
     }
 
+    .touch-btn-nav:active,
+    .touch-btn-reset:active {
+      transform: translateY(1px) scale(0.92);
+      background: rgba(255, 255, 255, 0.32);
+    }
+
+    .touch-btn-master-play {
+      width: 56px;
+      height: 56px;
+      min-width: 56px;
+      min-height: 56px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #a855f7, #6366f1);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      box-shadow: 0 0 20px rgba(168, 85, 247, 0.45);
+      color: #fff;
+    }
+
+    .touch-btn-master-play:hover {
+      transform: translateY(-2px) scale(1.06);
+      box-shadow: 0 0 28px rgba(168, 85, 247, 0.65);
+    }
+
+    .touch-btn-master-play:active {
+      transform: translateY(1px) scale(0.92);
+    }
+
+    .touch-btn-master-play.is-playing {
+      background: linear-gradient(135deg, #00e5ff, #0284c7);
+      box-shadow: 0 0 22px rgba(0, 229, 255, 0.5);
+    }
+
+    .touch-btn-master-play.is-playing:hover {
+      box-shadow: 0 0 30px rgba(0, 229, 255, 0.7);
+    }
+
+    /* Anchored Drop-Up Playlist Drawer */
     .yt-playlist-drawer {
       display: none;
-      background: rgba(15, 23, 42, 0.94);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      border: 1px solid var(--glass-border);
-      border-radius: 16px;
-      margin-top: 8px;
-      width: 100%;
-      max-height: 320px;
+      position: absolute;
+      bottom: calc(100% + 12px);
+      right: 0;
+      width: 380px;
+      max-width: calc(100vw - 48px);
+      max-height: 340px;
+      background: rgba(10, 15, 29, 0.94);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 18px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85);
+      padding: 10px;
+      z-index: 100;
       overflow-y: auto;
-      box-shadow: 0 16px 45px rgba(0,0,0,0.75);
-      padding: 8px;
     }
 
     .yt-playlist-drawer.open {
       display: block;
+      animation: drawerPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes drawerPop {
+      from { opacity: 0; transform: translateY(10px) scale(0.96); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
     }
 
     .playlist-header {
@@ -1990,44 +2117,6 @@ INDEX_HTML = r"""<!DOCTYPE html>
       <input type="file" id="workout-file-input" style="display:none;" accept=".zwo,.erg,.mrc,.json">
     </div>
 
-    <!-- YouTube Quick Controls & Playlist Drawer -->
-    <div class="yt-container interactive">
-      <div class="yt-quick-bar">
-        <div class="yt-icon">▶</div>
-        <div class="yt-info">
-          <div id="yt-now-playing" class="yt-title">Loading Spin Playlist…</div>
-          <div id="yt-status-sub" class="yt-sub">Press Space to Play/Pause</div>
-        </div>
-        <div class="yt-ctrls">
-          <button id="btn-prev" class="yt-btn" title="Previous Track (P)">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line></svg>
-          </button>
-          <button id="btn-play" class="yt-btn" title="Play/Pause (Space)">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-          </button>
-          <button id="btn-next" class="yt-btn" title="Next Track (N)">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line></svg>
-          </button>
-          <button id="btn-playlist-toggle" class="yt-btn" title="Expand Playlist Tracks">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-            <span id="yt-track-count" style="margin: 0 4px;">List</span>
-            <span style="font-size: 11px;">▾</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Dropdown Playlist Drawer -->
-      <div id="yt-playlist-drawer" class="yt-playlist-drawer">
-        <div class="playlist-header">
-          <span>Workout Playlist Tracks</span>
-          <span id="playlist-index-badge" style="color:var(--accent-cyan); font-family:'JetBrains Mono'">Track 1</span>
-        </div>
-        <div id="playlist-items-container">
-          <!-- Populated dynamically -->
-        </div>
-      </div>
-    </div>
-
     <!-- Bottom Telemetry HUD Dock -->
     <div class="telemetry-dock interactive">
       
@@ -2101,25 +2190,86 @@ INDEX_HTML = r"""<!DOCTYPE html>
         </div>
       </div>
 
-      <!-- Timer & Calories Pod -->
-      <div class="telemetry-card timer-card">
-        <div class="card-label">
-          <span>Workout Time</span>
-          <div style="display:flex; align-items:center; gap:6px;">
-            <button id="btn-timer-toggle" class="btn-ctrl" title="Start / Pause Workout">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-            </button>
-            <button id="btn-reset-timer" class="btn-ctrl" title="Reset Workout">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
-            </button>
+      <!-- Master Control: Workout Session & Media Pod -->
+      <div id="master-control-card" class="telemetry-card master-control-card timer-card">
+        <!-- Playlist Drop-up Drawer (Anchored above master card) -->
+        <div id="yt-playlist-drawer" class="yt-playlist-drawer">
+          <div class="playlist-header">
+            <span>Workout Playlist Tracks</span>
+            <span id="playlist-index-badge" style="color:var(--accent-cyan); font-family:'JetBrains Mono'">Track 1</span>
+          </div>
+          <div id="playlist-items-container">
+            <!-- Populated dynamically -->
           </div>
         </div>
-        <div class="card-main">
-          <span id="val-timer" class="card-value">0:00</span>
+
+        <div class="card-label">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span>Master Control</span>
+            <span id="workout-status" class="status-pill active-session">Active Session</span>
+          </div>
+          <button id="btn-playlist-toggle" class="btn-playlist-toggle" title="Workout Playlist Tracks">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"></line>
+              <line x1="8" y1="12" x2="21" y2="12"></line>
+              <line x1="8" y1="18" x2="21" y2="18"></line>
+              <line x1="3" y1="6" x2="3.01" y2="6"></line>
+              <line x1="3" y1="12" x2="3.01" y2="12"></line>
+              <line x1="3" y1="18" x2="3.01" y2="18"></line>
+            </svg>
+            <span id="yt-track-count">Tracks</span>
+            <span style="font-size:10px;">▴</span>
+          </button>
         </div>
-        <div class="card-footer">
-          <span id="workout-status">Active Session</span>
-          <span style="color:var(--accent-orange); font-weight:700; font-family:'JetBrains Mono'">🔥 <b id="val-calories">0</b> kcal</span>
+
+        <!-- Video Now Playing Bar -->
+        <div class="master-now-playing">
+          <div class="yt-indicator-icon">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="#ff0000">
+              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+            </svg>
+          </div>
+          <div class="master-track-info">
+            <div id="yt-now-playing" class="master-track-title">Loading Spin Playlist…</div>
+            <div id="yt-status-sub" class="master-track-sub">Press Space or Tap Master Play to Begin</div>
+          </div>
+        </div>
+
+        <!-- Metrics & Master Control Actions -->
+        <div class="master-main-row">
+          <div class="master-metric-group">
+            <span id="val-timer" class="card-value master-timer-value">0:00</span>
+            <span class="master-calories-badge">🔥 <b id="val-calories">0</b> kcal</span>
+          </div>
+
+          <div class="master-touch-controls">
+            <button id="btn-prev" class="touch-btn touch-btn-nav" title="Previous Track (P)" aria-label="Previous Track">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <polygon points="19 20 9 12 19 4 19 20"></polygon>
+                <line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line>
+              </svg>
+            </button>
+
+            <button id="btn-play" class="touch-btn touch-btn-master-play" title="Master Play / Pause Workout & Video (Space)" aria-label="Master Play or Pause">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                <polygon points="6 4 20 12 6 20 6 4"></polygon>
+              </svg>
+            </button>
+
+            <button id="btn-next" class="touch-btn touch-btn-nav" title="Next Track (N)" aria-label="Next Track">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <polygon points="5 4 15 12 5 20 5 4"></polygon>
+                <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line>
+              </svg>
+            </button>
+
+            <button id="btn-reset-timer" class="touch-btn touch-btn-reset" title="Reset Workout Session" aria-label="Reset Workout Session">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="1 4 1 10 7 10"></polyline>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2608,14 +2758,56 @@ INDEX_HTML = r"""<!DOCTYPE html>
       }
     }
 
+    function updateMasterPlayButtonUI(isPlaying) {
+      const playBtn = document.getElementById('btn-play');
+      const workoutStatusEl = document.getElementById('workout-status');
+      if (!playBtn) return;
+
+      if (isPlaying) {
+        playBtn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1.5"></rect><rect x="14" y="4" width="4" height="16" rx="1.5"></rect></svg>';
+        playBtn.classList.add('is-playing');
+        playBtn.title = 'Pause Workout & Video (Space / Tap)';
+        if (workoutStatusEl) {
+          workoutStatusEl.textContent = 'Active Session';
+          workoutStatusEl.className = 'status-pill active-session';
+        }
+      } else {
+        playBtn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>';
+        playBtn.classList.remove('is-playing');
+        playBtn.title = 'Play Workout & Video (Space / Tap)';
+        if (workoutStatusEl) {
+          workoutStatusEl.textContent = 'Workout Paused';
+          workoutStatusEl.className = 'status-pill paused-session';
+        }
+      }
+    }
+
+    function toggleMasterPlayPause() {
+      const isVideoPlaying = player && typeof player.getPlayerState === 'function' && player.getPlayerState() === YT.PlayerState.PLAYING;
+      const isWorkoutRunning = latestSnapshot ? latestSnapshot.is_running : false;
+      const shouldPlay = !(isVideoPlaying || isWorkoutRunning);
+
+      if (player) {
+        try {
+          if (shouldPlay) {
+            if (typeof player.playVideo === 'function') player.playVideo();
+          } else {
+            if (typeof player.pauseVideo === 'function') player.pauseVideo();
+          }
+        } catch (e) {}
+      }
+
+      setWorkoutRunning(shouldPlay);
+      updateMasterPlayButtonUI(shouldPlay);
+    }
+
     function onPlayerStateChange(event) {
       updateVideoTitle();
-      const playBtn = document.getElementById('btn-play');
       if (event.data === YT.PlayerState.PLAYING) {
-        playBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
+        updateMasterPlayButtonUI(true);
         setWorkoutRunning(true);
       } else if (event.data === YT.PlayerState.PAUSED) {
-        playBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+        updateMasterPlayButtonUI(false);
         setWorkoutRunning(false);
       }
       const isVideoProg = currentProgram === 'video_sync' || currentProgram === 'auto' || currentProgram.startsWith('v_');
@@ -2950,19 +3142,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
       document.getElementById('val-timer').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
       document.getElementById('val-calories').textContent = d.calories || 0;
 
-      const toggleBtn = document.getElementById('btn-timer-toggle');
-      const workoutStatusEl = document.getElementById('workout-status');
-      if (d.is_running) {
-        toggleBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
-        toggleBtn.title = 'Pause Workout Timer';
-        workoutStatusEl.textContent = 'Active Session';
-        workoutStatusEl.style.color = 'var(--text-muted)';
-      } else {
-        toggleBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
-        toggleBtn.title = 'Start / Resume Workout Timer';
-        workoutStatusEl.textContent = 'Workout Paused';
-        workoutStatusEl.style.color = '#f59e0b';
-      }
+      updateMasterPlayButtonUI(d.is_running);
 
       // Interval Engine Update
       updateIntervalEngine(elapsed, d.cadence);
@@ -3091,7 +3271,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
       if (e.code === 'Space') {
         e.preventDefault();
-        togglePlay();
+        toggleMasterPlayPause();
       } else if (e.code === 'KeyN') {
         nextVideo();
       } else if (e.code === 'KeyP') {
@@ -3178,13 +3358,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
     }
 
     function togglePlay() {
-      if (!player) return;
-      const state = player.getPlayerState();
-      if (state === YT.PlayerState.PLAYING) {
-        player.pauseVideo();
-      } else {
-        player.playVideo();
-      }
+      toggleMasterPlayPause();
     }
 
     function nextVideo() { if (player && player.nextVideo) player.nextVideo(); }
@@ -3204,7 +3378,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
     }
 
     // Wire Buttons
-    document.getElementById('btn-play').onclick = togglePlay;
+    document.getElementById('btn-play').onclick = toggleMasterPlayPause;
     document.getElementById('btn-next').onclick = nextVideo;
     document.getElementById('btn-prev').onclick = prevVideo;
     document.getElementById('btn-fs').onclick = toggleFullscreen;
@@ -3319,16 +3493,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
     if (new URLSearchParams(location.search).get('strava') === 'ok') refreshStravaStatus();
 
 
-    document.getElementById('btn-timer-toggle').onclick = () => {
-      fetch('/api/workout/toggle', { method: 'POST' }).then(() => {
-        if (!player || !latestSnapshot) return;
-        if (latestSnapshot.is_running) {
-          if (player.pauseVideo) player.pauseVideo();
-        } else {
-          if (player.playVideo) player.playVideo();
-        }
-      });
-    };
+    const timerToggleBtn = document.getElementById('btn-timer-toggle');
+    if (timerToggleBtn) {
+      timerToggleBtn.onclick = toggleMasterPlayPause;
+    }
 
     document.getElementById('btn-reset-timer').onclick = () => {
       fetch('/api/workout/reset', { method: 'POST' });
