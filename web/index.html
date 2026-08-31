@@ -79,42 +79,53 @@
     .top-bar {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
       width: 100%;
+      position: relative;
+      z-index: 50;
     }
 
-    .brand-pill {
+    .clock-pill-center {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      top: 0;
+      background: var(--glass-bg);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      padding: 10px 28px;
+      border-radius: 999px;
       display: flex;
       align-items: center;
       gap: 12px;
-      background: var(--glass-bg);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid var(--glass-border);
-      padding: 10px 20px;
-      border-radius: 999px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 229, 255, 0.15);
+      z-index: 60;
+      pointer-events: auto;
+      transition: all 0.3s ease;
     }
 
-    .brand-title {
-      font-weight: 900;
+    .clock-pill-center:hover {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 28px rgba(0, 229, 255, 0.3);
+    }
+
+    .clock-pill-center .clock-icon {
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.6));
+    }
+
+    .clock-pill-center #top-clock {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 26px;
+      font-weight: 800;
       letter-spacing: 1.5px;
-      font-size: 14px;
-      background: linear-gradient(135deg, #00e5ff 0%, #38bdf8 50%, #818cf8 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      text-transform: uppercase;
-    }
-
-    .playlist-name {
-      font-size: 13px;
-      color: var(--text-muted);
-      border-left: 1px solid rgba(255, 255, 255, 0.2);
-      padding-left: 12px;
-      max-width: 280px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      color: #ffffff;
+      text-shadow: 0 0 14px rgba(255, 255, 255, 0.35);
+      line-height: 1;
     }
 
     .top-actions {
@@ -155,6 +166,171 @@
       box-shadow: 0 0 10px var(--accent-green);
     }
 
+    .controls-menu-container {
+      position: relative;
+    }
+
+    .menu-trigger-btn {
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      color: var(--text-main);
+      width: 48px;
+      height: 48px;
+      min-width: 48px;
+      min-height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 18px;
+      transition: transform 0.15s ease, background 0.2s, border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .menu-trigger-btn:hover, .menu-trigger-btn.active {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 18px rgba(0, 229, 255, 0.45);
+      transform: scale(1.06);
+    }
+
+    .menu-trigger-btn:active {
+      transform: scale(0.92);
+    }
+
+    .menu-trigger-btn .menu-icon {
+      color: #ffffff;
+      transition: transform 0.25s ease;
+    }
+
+    .menu-trigger-btn.active .menu-icon {
+      transform: rotate(90deg);
+      color: var(--accent-cyan);
+    }
+
+    .controls-dropdown-menu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 12px);
+      right: 0;
+      width: 250px;
+      background: rgba(15, 23, 42, 0.96);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 20px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85), 0 0 25px rgba(0, 229, 255, 0.18);
+      padding: 10px;
+      z-index: 100;
+      animation: menuFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .controls-dropdown-menu.open {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    @keyframes menuFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.96);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .menu-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px 6px 12px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      margin-bottom: 4px;
+    }
+
+    .menu-items-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .menu-item-btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 9px 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.18s ease;
+    }
+
+    .menu-item-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateX(3px);
+    }
+
+    .menu-item-btn:active {
+      background: rgba(255, 255, 255, 0.22);
+      transform: scale(0.98);
+    }
+
+    .menu-item-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      flex-shrink: 0;
+    }
+
+    .menu-item-label {
+      flex: 1;
+      white-space: nowrap;
+    }
+
+    .menu-item-key {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 800;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 2px 6px;
+      border-radius: 5px;
+      color: var(--text-muted);
+    }
+
+    .menu-item-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      font-weight: 800;
+      color: var(--accent-cyan);
+      background: rgba(0, 229, 255, 0.14);
+      padding: 2px 7px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+    }
+
     .btn-icon {
       background: var(--glass-bg);
       backdrop-filter: blur(20px);
@@ -184,23 +360,6 @@
       transform: scale(0.92);
       background: rgba(255, 255, 255, 0.3);
       border-color: rgba(255, 255, 255, 0.5);
-    }
-
-    .clock-pill {
-      background: var(--glass-bg);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid var(--glass-border);
-      padding: 10px 20px;
-      border-radius: 999px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 14px;
-      font-weight: 700;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     }
 
     .btn-ctrl {
@@ -791,22 +950,18 @@
     }
 
     .interval-cue-bar {
-      position: absolute;
-      top: 84px;
-      left: 32px;
       background: var(--glass-bg);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
       border: 1px solid var(--glass-border);
-      border-radius: 16px;
-      padding: 10px 18px;
+      border-radius: 20px;
+      padding: 14px 22px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      min-width: 440px;
-      max-width: 640px;
-      width: fit-content;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+      gap: 10px;
+      min-width: 480px;
+      max-width: 620px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
       box-sizing: border-box;
       z-index: 50;
       transition: all 0.3s ease;
@@ -816,10 +971,18 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 800;
-      gap: 10px;
+      gap: 12px;
       width: 100%;
+    }
+
+    .interval-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      overflow: hidden;
     }
 
     .program-select-dropdown {
@@ -827,15 +990,15 @@
       border: 1px solid var(--glass-border);
       color: var(--accent-cyan);
       font-family: inherit;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 800;
-      padding: 4px 8px;
-      border-radius: 8px;
+      padding: 6px 12px;
+      border-radius: 10px;
       cursor: pointer;
       outline: none;
       transition: all 0.2s;
-      min-height: 26px;
-      max-width: 190px;
+      min-height: 32px;
+      max-width: 220px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -845,11 +1008,12 @@
     .program-select-dropdown:hover {
       background: #1e293b;
       border-color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
     }
 
     .program-select-dropdown:focus {
       border-color: var(--accent-cyan);
-      box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.5);
     }
 
     .program-select-dropdown option {
@@ -860,45 +1024,71 @@
     }
 
     .cue-interval-badge {
-      font-size: 11px;
-      font-weight: 700;
+      font-size: 13px;
+      font-weight: 800;
       color: #fff;
-      background: rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.12);
       border: 1px solid var(--glass-border);
-      padding: 3px 8px;
-      border-radius: 6px;
+      padding: 5px 12px;
+      border-radius: 8px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      max-width: 150px;
+      max-width: 180px;
       flex-shrink: 1;
+      letter-spacing: 0.5px;
     }
 
     .interval-target-pill {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 11.5px;
-      font-weight: 700;
-      padding: 3px 10px;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid var(--glass-border);
+      font-size: 13px;
+      font-weight: 800;
+      padding: 5px 14px;
+      border-radius: 10px;
+      background: rgba(0, 229, 255, 0.15);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(0, 229, 255, 0.4);
       white-space: nowrap;
       flex-shrink: 0;
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.2);
     }
 
     .interval-progress-bg {
       width: 100%;
-      height: 6px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 3px;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
       overflow: hidden;
     }
 
     .interval-progress-fill {
       height: 100%;
-      background: linear-gradient(90deg, #00e5ff, #0088ff);
+      background: linear-gradient(90deg, #00e5ff, #38bdf8, #818cf8);
       width: 0%;
       transition: width 0.3s ease, background 0.3s;
+      border-radius: 4px;
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
+    }
+
+    .interval-cue-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+
+    .interval-cue-footer #cue-desc {
+      color: var(--text-muted);
+      font-size: 12.5px;
+    }
+
+    .interval-cue-footer #cue-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 800;
+      color: #ffffff;
     }
 
     .modal-backdrop {
@@ -1059,11 +1249,46 @@
     
     <!-- Top Bar -->
     <div class="top-bar">
-      <div class="brand-pill interactive">
-        <div class="brand-title">🚴 Spin Studio</div>
-        <div id="playlist-title" class="playlist-name">High Energy Spin Mix</div>
+      <!-- Left: Expanded Intensity Tracker / Interval Cue Bar -->
+      <div id="interval-cue-bar" class="interval-cue-bar interactive">
+        <div class="interval-cue-header">
+          <div class="interval-header-left">
+            <select id="quick-select-program" class="program-select-dropdown" title="Select Workout Interval Program">
+              <option value="video_sync">🎬 Video-Matched (Auto-Sync)</option>
+              <option value="v_sweetspot">🚴 30m Sweet Spot (GCN)</option>
+              <option value="v_pyramid">⚡ 30m Full Pyramid (GCN)</option>
+              <option value="v_surges">🔥 32m Sprint Surges (GCN)</option>
+              <option value="v_cardio20">💨 20m Cardio Workout (GCN)</option>
+              <option value="open">🚴 Open Spin (Free Ride)</option>
+              <option value="hiit20">⚡ 20m Generic HIIT</option>
+              <option value="climb30">⛰️ 30m Climbs & Surges</option>
+              <option value="tabata">🔥 15m Tabata Fury</option>
+            </select>
+            <span id="cue-title" class="cue-interval-badge">Free Ride</span>
+          </div>
+          <span id="cue-target" class="interval-target-pill">Target: Free Spin</span>
+        </div>
+        <div class="interval-progress-bg">
+          <div id="cue-progress-fill" class="interval-progress-fill"></div>
+        </div>
+        <div class="interval-cue-footer">
+          <span id="cue-desc">Freestyle Intensity</span>
+          <span id="cue-time">--:--</span>
+        </div>
       </div>
 
+      <!-- Center: Big Clock -->
+      <div class="clock-pill-center interactive">
+        <span class="clock-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+        </span>
+        <span id="top-clock">--:--</span>
+      </div>
+
+      <!-- Right: Sensor Badges & Collapsible Controls Menu -->
       <div class="top-actions interactive">
         <div class="sensor-badges">
           <div class="sensor-tag"><span id="dot-hr" class="sensor-dot"></span> HR</div>
@@ -1071,44 +1296,104 @@
           <div class="sensor-tag"><span id="dot-spd" class="sensor-dot"></span> SPD</div>
           <div class="sensor-tag"><span id="dot-power" class="sensor-dot"></span> <span id="label-pwr-badge">PWR [EST]</span></div>
         </div>
-        <div class="clock-pill" id="top-clock">--:--</div>
-        <button id="btn-history" class="btn-icon" title="Ride History & SQLite Logs (H)">📜</button>
-        <button id="btn-pin" class="btn-icon" title="Pair Remote / LAN PIN">🔒</button>
-        <button id="btn-import-workout" class="btn-icon" title="Import Workout (.ZWO, .ERG, .MRC, .JSON)">📥</button>
-        <button id="btn-layout" class="btn-icon" title="Switch HUD Layout (L): Bottom / Left / Right">⬇️</button>
-        <button id="btn-summary" class="btn-icon" title="Workout Summary (S)">📊</button>
-        <button id="btn-settings" class="btn-icon" title="Settings">⚙️</button>
-        <button id="btn-fs" class="btn-icon" title="Fullscreen (F)">⛶</button>
+
+        <div class="controls-menu-container">
+          <button id="btn-menu-toggle" class="btn-icon menu-trigger-btn" title="HUD Controls & Tools" aria-label="Toggle Controls Menu">
+            <svg class="menu-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+              <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+              <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+              <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+            </svg>
+          </button>
+
+          <div id="controls-dropdown-menu" class="controls-dropdown-menu">
+            <div class="menu-header">
+              <span>HUD Controls</span>
+              <span style="font-size: 10px; color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace;">HOTKEYS</span>
+            </div>
+            <div class="menu-items-list">
+              <button id="btn-history" class="menu-item-btn" title="Ride History & SQLite Logs (H)">
+                <span class="menu-item-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#00e5ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 8v4l3 3"></path>
+                    <circle cx="12" cy="12" r="9"></circle>
+                  </svg>
+                </span>
+                <span class="menu-item-label">Ride History</span>
+                <kbd class="menu-item-key">H</kbd>
+              </button>
+
+              <button id="btn-pin" class="menu-item-btn" title="Pair Remote / LAN PIN">
+                <span class="menu-item-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                </span>
+                <span class="menu-item-label">Remote / PIN</span>
+                <span class="menu-item-tag">LAN</span>
+              </button>
+
+              <button id="btn-import-workout" class="menu-item-btn" title="Import Workout (.ZWO, .ERG, .MRC, .JSON)">
+                <span class="menu-item-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                </span>
+                <span class="menu-item-label">Import Workout</span>
+                <span class="menu-item-tag">ZWO</span>
+              </button>
+
+              <button id="btn-layout" class="menu-item-btn" title="Switch HUD Layout (L): Bottom / Left / Right">
+                <span class="menu-item-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                    <line x1="3" y1="15" x2="21" y2="15"></line>
+                  </svg>
+                </span>
+                <span class="menu-item-label">Switch Layout</span>
+                <kbd class="menu-item-key">L</kbd>
+              </button>
+
+              <button id="btn-summary" class="menu-item-btn" title="Workout Summary (S)">
+                <span class="menu-item-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                  </svg>
+                </span>
+                <span class="menu-item-label">Workout Summary</span>
+                <kbd class="menu-item-key">S</kbd>
+              </button>
+
+              <button id="btn-settings" class="menu-item-btn" title="Settings">
+                <span class="menu-item-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                  </svg>
+                </span>
+                <span class="menu-item-label">Settings</span>
+              </button>
+
+              <button id="btn-fs" class="menu-item-btn" title="Fullscreen (F)">
+                <span class="menu-item-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#f8fafc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                  </svg>
+                </span>
+                <span class="menu-item-label">Toggle Fullscreen</span>
+                <kbd class="menu-item-key">F</kbd>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
       <input type="file" id="workout-file-input" style="display:none;" accept=".zwo,.erg,.mrc,.json">
-    </div>
-
-    <!-- Interval Workout Cue Bar -->
-    <div id="interval-cue-bar" class="interval-cue-bar interactive">
-      <div class="interval-cue-header">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <select id="quick-select-program" class="program-select-dropdown" title="Select Workout Interval Program">
-            <option value="video_sync">🎬 Video-Matched (Auto-Sync)</option>
-            <option value="v_sweetspot">🚴 30m Sweet Spot (GCN)</option>
-            <option value="v_pyramid">⚡ 30m Full Pyramid (GCN)</option>
-            <option value="v_surges">🔥 32m Sprint Surges (GCN)</option>
-            <option value="v_cardio20">💨 20m Cardio Workout (GCN)</option>
-            <option value="open">🚴 Open Spin (Free Ride)</option>
-            <option value="hiit20">⚡ 20m Generic HIIT</option>
-            <option value="climb30">⛰️ 30m Climbs & Surges</option>
-            <option value="tabata">🔥 15m Tabata Fury</option>
-          </select>
-          <span id="cue-title" class="cue-interval-badge">Free Ride</span>
-        </div>
-        <span id="cue-target" class="interval-target-pill">Target: Free Spin</span>
-      </div>
-      <div class="interval-progress-bg">
-        <div id="cue-progress-fill" class="interval-progress-fill"></div>
-      </div>
-      <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted); font-weight:600;">
-        <span id="cue-desc">Freestyle Intensity</span>
-        <span id="cue-time" style="font-family:'JetBrains Mono'">--:--</span>
-      </div>
     </div>
 
     <!-- YouTube Quick Controls & Playlist Drawer -->
@@ -1120,10 +1405,20 @@
           <div id="yt-status-sub" class="yt-sub">Press Space to Play/Pause</div>
         </div>
         <div class="yt-ctrls">
-          <button id="btn-prev" class="yt-btn" title="Previous Track (P)">⏮</button>
-          <button id="btn-play" class="yt-btn" title="Play/Pause (Space)">⏯</button>
-          <button id="btn-next" class="yt-btn" title="Next Track (N)">⏭</button>
-          <button id="btn-playlist-toggle" class="yt-btn" title="Expand Playlist Tracks">📑 <span id="yt-track-count">List</span> ▾</button>
+          <button id="btn-prev" class="yt-btn" title="Previous Track (P)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line></svg>
+          </button>
+          <button id="btn-play" class="yt-btn" title="Play/Pause (Space)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          </button>
+          <button id="btn-next" class="yt-btn" title="Next Track (N)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line></svg>
+          </button>
+          <button id="btn-playlist-toggle" class="yt-btn" title="Expand Playlist Tracks">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            <span id="yt-track-count" style="margin: 0 4px;">List</span>
+            <span style="font-size: 11px;">▾</span>
+          </button>
         </div>
       </div>
 
@@ -1217,8 +1512,12 @@
         <div class="card-label">
           <span>Workout Time</span>
           <div style="display:flex; align-items:center; gap:6px;">
-            <button id="btn-timer-toggle" class="btn-ctrl" title="Start / Pause Workout">⏸</button>
-            <button id="btn-reset-timer" class="btn-ctrl" title="Reset Workout">↺</button>
+            <button id="btn-timer-toggle" class="btn-ctrl" title="Start / Pause Workout">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+            </button>
+            <button id="btn-reset-timer" class="btn-ctrl" title="Reset Workout">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+            </button>
           </div>
         </div>
         <div class="card-main">
@@ -1239,7 +1538,9 @@
     <div class="modal-box">
       <div class="modal-header">
         <h3 class="modal-title">Spin Studio Settings</h3>
-        <button id="btn-close-modal" class="btn-icon">✕</button>
+        <button id="btn-close-modal" class="btn-icon" title="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </div>
       <div class="form-group">
         <label class="form-label">Workout Interval Program</label>
@@ -1301,7 +1602,9 @@
     <div class="modal-box" style="width: 500px;">
       <div class="modal-header">
         <h3 class="modal-title">🏆 Workout Summary</h3>
-        <button id="btn-close-summary" class="btn-icon">✕</button>
+        <button id="btn-close-summary" class="btn-icon" title="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </div>
       <div class="summary-grid">
         <div class="summary-stat-box">
@@ -1354,7 +1657,9 @@
     <div class="modal-box" style="width: 760px; max-width: 95vw; max-height: 85vh; display: flex; flex-direction: column;">
       <div class="modal-header">
         <h3 class="modal-title">📜 Ride History & SQLite Logs</h3>
-        <button id="btn-close-history" class="btn-icon">✕</button>
+        <button id="btn-close-history" class="btn-icon" title="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </div>
       <div id="history-list-container" style="overflow-y: auto; flex: 1; margin-top: 12px;">
         <div id="history-loading" style="text-align:center; padding: 24px; color: var(--text-muted);">Loading past rides…</div>
@@ -1382,7 +1687,9 @@
     <div class="modal-box" style="width: 380px;">
       <div class="modal-header">
         <h3 class="modal-title">🔒 LAN Pairing Required</h3>
-        <button id="btn-close-pin" class="btn-icon">✕</button>
+        <button id="btn-close-pin" class="btn-icon" title="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </div>
       <p style="font-size: 13px; color: var(--text-muted); margin: 10px 0;">
         Enter the 6-digit PIN shown on the host computer's terminal to control this workout session.
@@ -1711,10 +2018,10 @@
       updateVideoTitle();
       const playBtn = document.getElementById('btn-play');
       if (event.data === YT.PlayerState.PLAYING) {
-        playBtn.textContent = '⏸';
+        playBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
         setWorkoutRunning(true);
       } else if (event.data === YT.PlayerState.PAUSED) {
-        playBtn.textContent = '▶';
+        playBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
         setWorkoutRunning(false);
       }
       const isVideoProg = currentProgram === 'video_sync' || currentProgram === 'auto' || currentProgram.startsWith('v_');
@@ -2052,12 +2359,12 @@
       const toggleBtn = document.getElementById('btn-timer-toggle');
       const workoutStatusEl = document.getElementById('workout-status');
       if (d.is_running) {
-        toggleBtn.textContent = '⏸';
+        toggleBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
         toggleBtn.title = 'Pause Workout Timer';
         workoutStatusEl.textContent = 'Active Session';
         workoutStatusEl.style.color = 'var(--text-muted)';
       } else {
-        toggleBtn.textContent = '▶';
+        toggleBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
         toggleBtn.title = 'Start / Resume Workout Timer';
         workoutStatusEl.textContent = 'Workout Paused';
         workoutStatusEl.style.color = '#f59e0b';
@@ -2201,6 +2508,13 @@
         toggleHUD();
       } else if (e.code === 'KeyL') {
         cycleLayout();
+      } else if (e.code === 'KeyM') {
+        const menuToggle = document.getElementById('btn-menu-toggle');
+        const controlsMenu = document.getElementById('controls-dropdown-menu');
+        if (menuToggle && controlsMenu) {
+          const isOpen = controlsMenu.classList.toggle('open');
+          menuToggle.classList.toggle('active', isOpen);
+        }
       } else if (e.code === 'KeyS') {
         const sm = document.getElementById('summary-modal');
         if (sm.classList.contains('open')) closeSummary(); else showSummary();
@@ -2246,14 +2560,15 @@
 
       const btn = document.getElementById('btn-layout');
       if (btn) {
+        const label = btn.querySelector('.menu-item-label');
         if (currentLayout === 'left') {
-          btn.textContent = '⬅️';
+          if (label) label.textContent = 'Layout: Left Stack'; else btn.textContent = '⬅️';
           btn.title = 'HUD Layout: Left Stack (Click or press L to switch)';
         } else if (currentLayout === 'right') {
-          btn.textContent = '➡️';
+          if (label) label.textContent = 'Layout: Right Stack'; else btn.textContent = '➡️';
           btn.title = 'HUD Layout: Right Stack (Click or press L to switch)';
         } else {
-          btn.textContent = '⬇️';
+          if (label) label.textContent = 'Layout: Bottom Bar'; else btn.textContent = '⬇️';
           btn.title = 'HUD Layout: Bottom Bar (Click or press L to switch)';
         }
       }
@@ -2311,6 +2626,31 @@
         drawer.classList.remove('open');
       }
     });
+
+    // Expandable Controls Menu
+    const menuToggle = document.getElementById('btn-menu-toggle');
+    const controlsMenu = document.getElementById('controls-dropdown-menu');
+    if (menuToggle && controlsMenu) {
+      menuToggle.onclick = (e) => {
+        e.stopPropagation();
+        const isOpen = controlsMenu.classList.toggle('open');
+        menuToggle.classList.toggle('active', isOpen);
+      };
+
+      document.addEventListener('click', (e) => {
+        if (!controlsMenu.contains(e.target) && e.target !== menuToggle && !menuToggle.contains(e.target)) {
+          controlsMenu.classList.remove('open');
+          menuToggle.classList.remove('active');
+        }
+      });
+
+      controlsMenu.querySelectorAll('.menu-item-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          controlsMenu.classList.remove('open');
+          menuToggle.classList.remove('active');
+        });
+      });
+    }
 
     document.getElementById('btn-summary').onclick = showSummary;
     document.getElementById('btn-close-summary').onclick = closeSummary;

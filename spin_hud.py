@@ -673,42 +673,53 @@ INDEX_HTML = r"""<!DOCTYPE html>
     .top-bar {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
       width: 100%;
+      position: relative;
+      z-index: 50;
     }
 
-    .brand-pill {
+    .clock-pill-center {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      top: 0;
+      background: var(--glass-bg);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      padding: 10px 28px;
+      border-radius: 999px;
       display: flex;
       align-items: center;
       gap: 12px;
-      background: var(--glass-bg);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid var(--glass-border);
-      padding: 10px 20px;
-      border-radius: 999px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 229, 255, 0.15);
+      z-index: 60;
+      pointer-events: auto;
+      transition: all 0.3s ease;
     }
 
-    .brand-title {
-      font-weight: 900;
+    .clock-pill-center:hover {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 28px rgba(0, 229, 255, 0.3);
+    }
+
+    .clock-pill-center .clock-icon {
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.6));
+    }
+
+    .clock-pill-center #top-clock {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 26px;
+      font-weight: 800;
       letter-spacing: 1.5px;
-      font-size: 14px;
-      background: linear-gradient(135deg, #00e5ff 0%, #38bdf8 50%, #818cf8 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      text-transform: uppercase;
-    }
-
-    .playlist-name {
-      font-size: 13px;
-      color: var(--text-muted);
-      border-left: 1px solid rgba(255, 255, 255, 0.2);
-      padding-left: 12px;
-      max-width: 280px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      color: #ffffff;
+      text-shadow: 0 0 14px rgba(255, 255, 255, 0.35);
+      line-height: 1;
     }
 
     .top-actions {
@@ -749,6 +760,171 @@ INDEX_HTML = r"""<!DOCTYPE html>
       box-shadow: 0 0 10px var(--accent-green);
     }
 
+    .controls-menu-container {
+      position: relative;
+    }
+
+    .menu-trigger-btn {
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      color: var(--text-main);
+      width: 48px;
+      height: 48px;
+      min-width: 48px;
+      min-height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 18px;
+      transition: transform 0.15s ease, background 0.2s, border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .menu-trigger-btn:hover, .menu-trigger-btn.active {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 18px rgba(0, 229, 255, 0.45);
+      transform: scale(1.06);
+    }
+
+    .menu-trigger-btn:active {
+      transform: scale(0.92);
+    }
+
+    .menu-trigger-btn .menu-icon {
+      color: #ffffff;
+      transition: transform 0.25s ease;
+    }
+
+    .menu-trigger-btn.active .menu-icon {
+      transform: rotate(90deg);
+      color: var(--accent-cyan);
+    }
+
+    .controls-dropdown-menu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 12px);
+      right: 0;
+      width: 250px;
+      background: rgba(15, 23, 42, 0.96);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 20px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85), 0 0 25px rgba(0, 229, 255, 0.18);
+      padding: 10px;
+      z-index: 100;
+      animation: menuFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .controls-dropdown-menu.open {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    @keyframes menuFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.96);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .menu-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px 6px 12px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      margin-bottom: 4px;
+    }
+
+    .menu-items-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .menu-item-btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 9px 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.18s ease;
+    }
+
+    .menu-item-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateX(3px);
+    }
+
+    .menu-item-btn:active {
+      background: rgba(255, 255, 255, 0.22);
+      transform: scale(0.98);
+    }
+
+    .menu-item-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      flex-shrink: 0;
+    }
+
+    .menu-item-label {
+      flex: 1;
+      white-space: nowrap;
+    }
+
+    .menu-item-key {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 800;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 2px 6px;
+      border-radius: 5px;
+      color: var(--text-muted);
+    }
+
+    .menu-item-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      font-weight: 800;
+      color: var(--accent-cyan);
+      background: rgba(0, 229, 255, 0.14);
+      padding: 2px 7px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+    }
+
     .btn-icon {
       background: var(--glass-bg);
       backdrop-filter: blur(20px);
@@ -778,23 +954,6 @@ INDEX_HTML = r"""<!DOCTYPE html>
       transform: scale(0.92);
       background: rgba(255, 255, 255, 0.3);
       border-color: rgba(255, 255, 255, 0.5);
-    }
-
-    .clock-pill {
-      background: var(--glass-bg);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid var(--glass-border);
-      padding: 10px 20px;
-      border-radius: 999px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 14px;
-      font-weight: 700;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     }
 
     .btn-ctrl {
@@ -905,8 +1064,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
       right: auto;
       top: 188px;
       bottom: 16px;
-      width: 380px;
-      max-width: 380px;
+      width: 440px;
+      max-width: 440px;
       margin: 0;
       flex-direction: column;
       justify-content: flex-start;
@@ -932,9 +1091,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
       top: 76px;
       left: 32px;
       right: auto;
-      width: 380px;
-      min-width: 380px;
-      max-width: 380px;
+      width: 440px;
+      min-width: 440px;
+      max-width: 440px;
       z-index: 45;
     }
     .layout-left .yt-container {
@@ -952,8 +1111,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
       left: auto;
       top: 188px;
       bottom: 16px;
-      width: 380px;
-      max-width: 380px;
+      width: 440px;
+      max-width: 440px;
       margin: 0;
       flex-direction: column;
       justify-content: flex-start;
@@ -979,9 +1138,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
       top: 76px;
       right: 32px;
       left: auto;
-      width: 380px;
-      min-width: 380px;
-      max-width: 380px;
+      width: 440px;
+      min-width: 440px;
+      max-width: 440px;
       z-index: 45;
     }
     .layout-right .yt-container {
@@ -1385,21 +1544,18 @@ INDEX_HTML = r"""<!DOCTYPE html>
     }
 
     .interval-cue-bar {
-      position: absolute;
-      top: 84px;
-      left: 32px;
       background: var(--glass-bg);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
       border: 1px solid var(--glass-border);
-      border-radius: 16px;
-      padding: 10px 16px;
+      border-radius: 20px;
+      padding: 14px 22px;
       display: flex;
       flex-direction: column;
-      gap: 5px;
-      min-width: 350px;
-      max-width: 480px;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+      gap: 10px;
+      min-width: 480px;
+      max-width: 620px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
       box-sizing: border-box;
       z-index: 50;
       transition: all 0.3s ease;
@@ -1409,9 +1565,18 @@ INDEX_HTML = r"""<!DOCTYPE html>
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 800;
-      gap: 8px;
+      gap: 12px;
+      width: 100%;
+    }
+
+    .interval-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      overflow: hidden;
     }
 
     .program-select-dropdown {
@@ -1419,28 +1584,30 @@ INDEX_HTML = r"""<!DOCTYPE html>
       border: 1px solid var(--glass-border);
       color: var(--accent-cyan);
       font-family: inherit;
-      font-size: 11.5px;
+      font-size: 13px;
       font-weight: 800;
-      padding: 4px 8px;
-      border-radius: 8px;
+      padding: 6px 12px;
+      border-radius: 10px;
       cursor: pointer;
       outline: none;
       transition: all 0.2s;
-      min-height: 26px;
-      max-width: 175px;
+      min-height: 32px;
+      max-width: 220px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      flex-shrink: 1;
     }
 
     .program-select-dropdown:hover {
       background: #1e293b;
       border-color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
     }
 
     .program-select-dropdown:focus {
       border-color: var(--accent-cyan);
-      box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.5);
     }
 
     .program-select-dropdown option {
@@ -1451,43 +1618,71 @@ INDEX_HTML = r"""<!DOCTYPE html>
     }
 
     .cue-interval-badge {
-      font-size: 10.5px;
-      font-weight: 700;
+      font-size: 13px;
+      font-weight: 800;
       color: #fff;
-      background: rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.12);
       border: 1px solid var(--glass-border);
-      padding: 2px 7px;
-      border-radius: 6px;
+      padding: 5px 12px;
+      border-radius: 8px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      max-width: 110px;
+      max-width: 180px;
+      flex-shrink: 1;
+      letter-spacing: 0.5px;
     }
 
     .interval-target-pill {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 3px 7px;
-      border-radius: 6px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid var(--glass-border);
+      font-size: 13px;
+      font-weight: 800;
+      padding: 5px 14px;
+      border-radius: 10px;
+      background: rgba(0, 229, 255, 0.15);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(0, 229, 255, 0.4);
       white-space: nowrap;
+      flex-shrink: 0;
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.2);
     }
 
     .interval-progress-bg {
       width: 100%;
-      height: 6px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 3px;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
       overflow: hidden;
     }
 
     .interval-progress-fill {
       height: 100%;
-      background: linear-gradient(90deg, #00e5ff, #0088ff);
+      background: linear-gradient(90deg, #00e5ff, #38bdf8, #818cf8);
       width: 0%;
       transition: width 0.3s ease, background 0.3s;
+      border-radius: 4px;
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
+    }
+
+    .interval-cue-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+
+    .interval-cue-footer #cue-desc {
+      color: var(--text-muted);
+      font-size: 12.5px;
+    }
+
+    .interval-cue-footer #cue-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 800;
+      color: #ffffff;
     }
 
     .modal-backdrop {
@@ -1648,51 +1843,151 @@ INDEX_HTML = r"""<!DOCTYPE html>
     
     <!-- Top Bar -->
     <div class="top-bar">
-      <div class="brand-pill interactive">
-        <div class="brand-title">🚴 Spin Studio</div>
-        <div id="playlist-title" class="playlist-name">High Energy Spin Mix</div>
+      <!-- Left: Expanded Intensity Tracker / Interval Cue Bar -->
+      <div id="interval-cue-bar" class="interval-cue-bar interactive">
+        <div class="interval-cue-header">
+          <div class="interval-header-left">
+            <select id="quick-select-program" class="program-select-dropdown" title="Select Workout Interval Program">
+              <option value="video_sync">🎬 Video-Matched (Auto-Sync)</option>
+              <option value="v_sweetspot">🚴 30m Sweet Spot (GCN)</option>
+              <option value="v_pyramid">⚡ 30m Full Pyramid (GCN)</option>
+              <option value="v_surges">🔥 32m Sprint Surges (GCN)</option>
+              <option value="v_cardio20">💨 20m Cardio Workout (GCN)</option>
+              <option value="open">🚴 Open Spin (Free Ride)</option>
+              <option value="hiit20">⚡ 20m Generic HIIT</option>
+              <option value="climb30">⛰️ 30m Climbs & Surges</option>
+              <option value="tabata">🔥 15m Tabata Fury</option>
+            </select>
+            <span id="cue-title" class="cue-interval-badge">Free Ride</span>
+          </div>
+          <span id="cue-target" class="interval-target-pill">Target: Free Spin</span>
+        </div>
+        <div class="interval-progress-bg">
+          <div id="cue-progress-fill" class="interval-progress-fill"></div>
+        </div>
+        <div class="interval-cue-footer">
+          <span id="cue-desc">Freestyle Intensity</span>
+          <span id="cue-time">--:--</span>
+        </div>
       </div>
 
+      <!-- Center: Big Clock -->
+      <div class="clock-pill-center interactive">
+        <span class="clock-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+        </span>
+        <span id="top-clock">--:--</span>
+      </div>
+
+      <!-- Right: Sensor Badges & Collapsible Controls Menu -->
       <div class="top-actions interactive">
         <div class="sensor-badges">
           <div class="sensor-tag"><span id="dot-hr" class="sensor-dot"></span> HR</div>
           <div class="sensor-tag"><span id="dot-cad" class="sensor-dot"></span> CAD</div>
           <div class="sensor-tag"><span id="dot-spd" class="sensor-dot"></span> SPD</div>
+          <div class="sensor-tag"><span id="dot-power" class="sensor-dot"></span> <span id="label-pwr-badge">PWR [EST]</span></div>
         </div>
-        <div class="clock-pill" id="top-clock">--:--</div>
-        <button id="btn-layout" class="btn-icon" title="Switch HUD Layout (L): Bottom / Left / Right">⬇️</button>
-        <button id="btn-summary" class="btn-icon" title="Workout Summary (S)">📊</button>
-        <button id="btn-settings" class="btn-icon" title="Settings">⚙️</button>
-        <button id="btn-fs" class="btn-icon" title="Fullscreen (F)">⛶</button>
-      </div>
-    </div>
 
-    <!-- Interval Workout Cue Bar -->
-    <div id="interval-cue-bar" class="interval-cue-bar interactive">
-      <div class="interval-cue-header">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <select id="quick-select-program" class="program-select-dropdown" title="Select Workout Interval Program">
-            <option value="video_sync">🎬 Video-Matched (Auto-Sync)</option>
-            <option value="v_sweetspot">🚴 30m Sweet Spot (GCN)</option>
-            <option value="v_pyramid">⚡ 30m Full Pyramid (GCN)</option>
-            <option value="v_surges">🔥 32m Sprint Surges (GCN)</option>
-            <option value="v_cardio20">💨 20m Cardio Workout (GCN)</option>
-            <option value="open">🚴 Open Spin (Free Ride)</option>
-            <option value="hiit20">⚡ 20m Generic HIIT</option>
-            <option value="climb30">⛰️ 30m Climbs & Surges</option>
-            <option value="tabata">🔥 15m Tabata Fury</option>
-          </select>
-          <span id="cue-title" class="cue-interval-badge">Free Ride</span>
+        <div class="controls-menu-container">
+          <button id="btn-menu-toggle" class="btn-icon menu-trigger-btn" title="HUD Controls & Tools" aria-label="Toggle Controls Menu">
+            <svg class="menu-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+              <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+              <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+              <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+            </svg>
+          </button>
+
+          <div id="controls-dropdown-menu" class="controls-dropdown-menu">
+            <div class="menu-header">
+              <span>HUD Controls</span>
+              <span style="font-size: 10px; color: var(--accent-cyan); font-family: 'JetBrains Mono', monospace;">HOTKEYS</span>
+            </div>
+            <div class="menu-items-list">
+              <button id="btn-history" class="menu-item-btn" title="Ride History & SQLite Logs (H)">
+                <span class="menu-item-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#00e5ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 8v4l3 3"></path>
+                    <circle cx="12" cy="12" r="9"></circle>
+                  </svg>
+                </span>
+                <span class="menu-item-label">Ride History</span>
+                <kbd class="menu-item-key">H</kbd>
+              </button>
+
+              <button id="btn-pin" class="menu-item-btn" title="Pair Remote / LAN PIN">
+                <span class="menu-item-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                </span>
+                <span class="menu-item-label">Remote / PIN</span>
+                <span class="menu-item-tag">LAN</span>
+              </button>
+
+              <button id="btn-import-workout" class="menu-item-btn" title="Import Workout (.ZWO, .ERG, .MRC, .JSON)">
+                <span class="menu-item-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                </span>
+                <span class="menu-item-label">Import Workout</span>
+                <span class="menu-item-tag">ZWO</span>
+              </button>
+
+              <button id="btn-layout" class="menu-item-btn" title="Switch HUD Layout (L): Bottom / Left / Right">
+                <span class="menu-item-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                    <line x1="3" y1="15" x2="21" y2="15"></line>
+                  </svg>
+                </span>
+                <span class="menu-item-label">Switch Layout</span>
+                <kbd class="menu-item-key">L</kbd>
+              </button>
+
+              <button id="btn-summary" class="menu-item-btn" title="Workout Summary (S)">
+                <span class="menu-item-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                  </svg>
+                </span>
+                <span class="menu-item-label">Workout Summary</span>
+                <kbd class="menu-item-key">S</kbd>
+              </button>
+
+              <button id="btn-settings" class="menu-item-btn" title="Settings">
+                <span class="menu-item-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                  </svg>
+                </span>
+                <span class="menu-item-label">Settings</span>
+              </button>
+
+              <button id="btn-fs" class="menu-item-btn" title="Fullscreen (F)">
+                <span class="menu-item-icon">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#f8fafc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                  </svg>
+                </span>
+                <span class="menu-item-label">Toggle Fullscreen</span>
+                <kbd class="menu-item-key">F</kbd>
+              </button>
+            </div>
+          </div>
         </div>
-        <span id="cue-target" class="interval-target-pill">Target: Free Spin</span>
       </div>
-      <div class="interval-progress-bg">
-        <div id="cue-progress-fill" class="interval-progress-fill"></div>
-      </div>
-      <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted); font-weight:600;">
-        <span id="cue-desc">Freestyle Intensity</span>
-        <span id="cue-time" style="font-family:'JetBrains Mono'">--:--</span>
-      </div>
+      <input type="file" id="workout-file-input" style="display:none;" accept=".zwo,.erg,.mrc,.json">
     </div>
 
     <!-- YouTube Quick Controls & Playlist Drawer -->
@@ -1704,10 +1999,20 @@ INDEX_HTML = r"""<!DOCTYPE html>
           <div id="yt-status-sub" class="yt-sub">Press Space to Play/Pause</div>
         </div>
         <div class="yt-ctrls">
-          <button id="btn-prev" class="yt-btn" title="Previous Track (P)">⏮</button>
-          <button id="btn-play" class="yt-btn" title="Play/Pause (Space)">⏯</button>
-          <button id="btn-next" class="yt-btn" title="Next Track (N)">⏭</button>
-          <button id="btn-playlist-toggle" class="yt-btn" title="Expand Playlist Tracks">📑 <span id="yt-track-count">List</span> ▾</button>
+          <button id="btn-prev" class="yt-btn" title="Previous Track (P)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line></svg>
+          </button>
+          <button id="btn-play" class="yt-btn" title="Play/Pause (Space)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          </button>
+          <button id="btn-next" class="yt-btn" title="Next Track (N)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line></svg>
+          </button>
+          <button id="btn-playlist-toggle" class="yt-btn" title="Expand Playlist Tracks">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            <span id="yt-track-count" style="margin: 0 4px;">List</span>
+            <span style="font-size: 11px;">▾</span>
+          </button>
         </div>
       </div>
 
@@ -1762,9 +2067,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
       </div>
 
       <!-- Power Meter Pod -->
-      <div id="power-card" class="telemetry-card power-card">
+      <div id="power-card" class="telemetry-card power-card" title="[ tighter   ] looser   1/2/3 = LOW/MED/HARD" onclick="nudgeKnob(true)">
         <div class="card-label">
-          <span>Power</span>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span>Power</span>
+            <span id="badge-power-source" class="zone-pill" style="font-size:10px; padding:1px 6px; background:rgba(245,158,11,0.25); color:#f59e0b; font-weight:800;">EST</span>
+          </div>
           <span style="color:#f59e0b; font-size:16px;">⚡</span>
         </div>
         <div class="card-main">
@@ -1773,7 +2081,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
         </div>
         <div class="card-footer">
           <span>Avg <b id="val-avg-watts">—</b> · Max <b id="val-max-watts">—</b></span>
-          <span style="color:var(--accent-cyan); font-family:'JetBrains Mono'; font-weight:700;"><b id="val-wkg">0.0</b> W/kg</span>
+          <span id="val-knob" style="color:#f59e0b; font-family:'JetBrains Mono'; font-weight:700;">LOW 1</span>
         </div>
       </div>
 
@@ -1798,8 +2106,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
         <div class="card-label">
           <span>Workout Time</span>
           <div style="display:flex; align-items:center; gap:6px;">
-            <button id="btn-timer-toggle" class="btn-ctrl" title="Start / Pause Workout">⏸</button>
-            <button id="btn-reset-timer" class="btn-ctrl" title="Reset Workout">↺</button>
+            <button id="btn-timer-toggle" class="btn-ctrl" title="Start / Pause Workout">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+            </button>
+            <button id="btn-reset-timer" class="btn-ctrl" title="Reset Workout">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+            </button>
           </div>
         </div>
         <div class="card-main">
@@ -1820,7 +2132,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
     <div class="modal-box">
       <div class="modal-header">
         <h3 class="modal-title">Spin Studio Settings</h3>
-        <button id="btn-close-modal" class="btn-icon">✕</button>
+        <button id="btn-close-modal" class="btn-icon" title="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </div>
       <div class="form-group">
         <label class="form-label">Workout Interval Program</label>
@@ -1860,6 +2174,19 @@ INDEX_HTML = r"""<!DOCTYPE html>
         <label class="form-label">Max Heart Rate (BPM)</label>
         <input type="number" id="input-maxhr" class="form-input" value="190">
       </div>
+      <div class="form-group">
+        <label class="form-label">Video Sync Lead / Offset (seconds)</label>
+        <input type="number" id="input-video-offset" class="form-input" value="3.5" step="0.5" min="0" max="30">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Strava</label>
+        <div id="strava-status" style="font-size:13px;opacity:.85;margin-bottom:8px;">Not connected</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" id="btn-strava-connect" class="btn-primary" style="background:linear-gradient(135deg,#fc4c02,#e34402);">Connect Strava</button>
+          <button type="button" id="btn-strava-disconnect" class="btn-primary" style="display:none;">Disconnect</button>
+        </div>
+        <div style="font-size:12px;opacity:.65;margin-top:6px;">Same API app as Gear Tracker. Posts virtual watts. Garmin still syncs a second ride unless you turn that off for indoor.</div>
+      </div>
       <button id="btn-save-settings" class="btn-primary">Save & Apply</button>
     </div>
   </div>
@@ -1869,7 +2196,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
     <div class="modal-box" style="width: 500px;">
       <div class="modal-header">
         <h3 class="modal-title">🏆 Workout Summary</h3>
-        <button id="btn-close-summary" class="btn-icon">✕</button>
+        <button id="btn-close-summary" class="btn-icon" title="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </div>
       <div class="summary-grid">
         <div class="summary-stat-box">
@@ -1906,9 +2235,64 @@ INDEX_HTML = r"""<!DOCTYPE html>
         </div>
       </div>
       <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
-        <button id="btn-export-tcx" class="btn-primary" style="background: linear-gradient(135deg, #fc4c02, #e34402); color:#fff;">💾 Download Strava / Garmin (.TCX)</button>
+        <button id="btn-strava-upload" class="btn-primary" style="background: linear-gradient(135deg, #fc4c02, #e34402); color:#fff;">Post to Strava</button>
+        <div id="strava-upload-status" style="font-size:13px;opacity:.85;min-height:1.2em;"></div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+          <button id="btn-export-fit" class="btn-primary" style="background: linear-gradient(135deg, #0ea5e9, #0284c7); color:#fff;">💾 Download .FIT</button>
+          <button id="btn-export-tcx" class="btn-primary" style="background: linear-gradient(135deg, #fc4c02, #e34402); color:#fff;">💾 Download .TCX</button>
+        </div>
         <button id="btn-done-summary" class="btn-primary">Awesome Ride!</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Ride History Modal -->
+  <div id="history-modal" class="modal-backdrop">
+    <div class="modal-box" style="width: 760px; max-width: 95vw; max-height: 85vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h3 class="modal-title">📜 Ride History & SQLite Logs</h3>
+        <button id="btn-close-history" class="btn-icon" title="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div id="history-list-container" style="overflow-y: auto; flex: 1; margin-top: 12px;">
+        <div id="history-loading" style="text-align:center; padding: 24px; color: var(--text-muted);">Loading past rides…</div>
+        <table id="history-table" style="width:100%; border-collapse: collapse; font-size: 13px; display: none;">
+          <thead>
+            <tr style="border-bottom: 1px solid var(--glass-border); text-align: left; color: var(--text-muted); font-size: 11px; text-transform: uppercase;">
+              <th style="padding: 8px;">Date</th>
+              <th style="padding: 8px;">Workout</th>
+              <th style="padding: 8px;">Time</th>
+              <th style="padding: 8px;">Distance</th>
+              <th style="padding: 8px;">Avg Watts</th>
+              <th style="padding: 8px;">Avg HR</th>
+              <th style="padding: 8px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="history-table-body">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- LAN Pairing PIN Modal -->
+  <div id="pin-modal" class="modal-backdrop">
+    <div class="modal-box" style="width: 380px;">
+      <div class="modal-header">
+        <h3 class="modal-title">🔒 LAN Pairing Required</h3>
+        <button id="btn-close-pin" class="btn-icon" title="Close">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted); margin: 10px 0;">
+        Enter the 6-digit PIN shown on the host computer's terminal to control this workout session.
+      </p>
+      <div class="form-group">
+        <input type="text" id="input-lan-pin" class="form-input" placeholder="e.g. 849201" style="font-size: 20px; text-align: center; letter-spacing: 4px; font-family: 'JetBrains Mono';">
+      </div>
+      <div id="pin-error-msg" style="color: var(--accent-red); font-size: 12px; margin-bottom: 8px; min-height: 1.2em;"></div>
+      <button id="btn-submit-pin" class="btn-primary">Unlock Spin Studio</button>
     </div>
   </div>
 
@@ -1920,6 +2304,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
     let isImperial = true;
     let crankAngle = 0;
     const videoTitleCache = {};
+    let videoSyncOffset = parseFloat(localStorage.getItem('spin_hud_video_offset') || '3.5');
 
     function fetchVideoTitle(vidId, callback) {
       if (videoTitleCache[vidId]) {
@@ -1941,33 +2326,35 @@ INDEX_HTML = r"""<!DOCTYPE html>
       // 1. 20 Min Cardio | Spin Bike Workout Without Music (4Ek31_3PMW4)
       "4Ek31_3PMW4": {
         name: "20m Cardio Spin",
+        offset: 3.5,
         intervals: [
-          { name: "Warmup Spin", duration: 120, minRpm: 80, maxRpm: 90, color: "#38bdf8", desc: "Easy aerobic warmup (3/10)" },
-          { name: "Out of Saddle Climb 1/4", duration: 60, minRpm: 70, maxRpm: 80, color: "#f97316", desc: "Standing climb effort (8/10)" },
-          { name: "Seated High Surge 1/4", duration: 60, minRpm: 90, maxRpm: 100, color: "#ef4444", desc: "Seated power surge (8/10)" },
-          { name: "Recovery Spin", duration: 60, minRpm: 75, maxRpm: 85, color: "#22c55e", desc: "Catch your breath (3/10)" },
-          { name: "Out of Saddle Climb 2/4", duration: 60, minRpm: 70, maxRpm: 80, color: "#f97316", desc: "Standing heavy climb (8/10)" },
-          { name: "Seated High Surge 2/4", duration: 60, minRpm: 90, maxRpm: 100, color: "#ef4444", desc: "Fast leg turnover (8/10)" },
-          { name: "Recovery Spin", duration: 60, minRpm: 75, maxRpm: 85, color: "#22c55e", desc: "Easy spin recovery (3/10)" },
-          { name: "Out of Saddle Climb 3/4", duration: 60, minRpm: 70, maxRpm: 80, color: "#f97316", desc: "Standing power climb (8/10)" },
-          { name: "Seated High Surge 3/4", duration: 60, minRpm: 90, maxRpm: 100, color: "#ef4444", desc: "Drive the cadence (8/10)" },
-          { name: "Recovery Spin", duration: 60, minRpm: 75, maxRpm: 85, color: "#22c55e", desc: "Flush the legs (3/10)" },
-          { name: "Out of Saddle Climb 4/4", duration: 60, minRpm: 70, maxRpm: 80, color: "#f97316", desc: "Final standing climb (8/10)" },
-          { name: "Seated High Surge 4/4", duration: 60, minRpm: 90, maxRpm: 100, color: "#ef4444", desc: "Seated sprint push (8/10)" },
-          { name: "Recovery Spin", duration: 60, minRpm: 75, maxRpm: 85, color: "#22c55e", desc: "Prepare for 30s blasts (3/10)" },
-          { name: "Standing Burst 1/2", duration: 30, minRpm: 75, maxRpm: 85, color: "#f97316", desc: "Sharp standing attack (8/10)" },
-          { name: "Seated Fast Spin 1/2", duration: 30, minRpm: 95, maxRpm: 105, color: "#ef4444", desc: "Seated high speed (8/10)" },
-          { name: "Recovery Spin", duration: 60, minRpm: 75, maxRpm: 85, color: "#22c55e", desc: "Short recovery (3/10)" },
-          { name: "Standing Burst 2/2", duration: 30, minRpm: 80, maxRpm: 90, color: "#f97316", desc: "Out of saddle blast (9/10)" },
-          { name: "MAX FINISH SPRINT!", duration: 30, minRpm: 110, maxRpm: 125, color: "#ff0055", desc: "ALL-OUT SPRINT! (10/10)" },
-          { name: "Recovery Spin", duration: 60, minRpm: 75, maxRpm: 85, color: "#22c55e", desc: "Breathe and relax (3/10)" },
-          { name: "Cool Down", duration: 124, minRpm: 65, maxRpm: 75, color: "#38bdf8", desc: "Gentle cool down (2/10)" }
+          { name: "Warmup Spin", duration: 120, minRpm: 80, maxRpm: 90, color: "#38bdf8", desc: "Easy aerobic warmup (3/10)", knob: "low" },
+          { name: "Out of Saddle Climb 1/4", duration: 60, minRpm: 70, maxRpm: 80, color: "#f97316", desc: "Standing climb effort (8/10)", knob: "hard" },
+          { name: "Seated High Surge 1/4", duration: 60, minRpm: 90, maxRpm: 100, color: "#ef4444", desc: "Seated power surge (6/10)", knob: "med" },
+          { name: "Recovery Spin", duration: 60, minRpm: 75, maxRpm: 85, color: "#22c55e", desc: "Catch your breath (3/10)", knob: "low" },
+          { name: "Out of Saddle Climb 2/4", duration: 60, minRpm: 70, maxRpm: 80, color: "#f97316", desc: "Standing heavy climb (8/10)", knob: "hard" },
+          { name: "Seated High Surge 2/4", duration: 60, minRpm: 90, maxRpm: 100, color: "#ef4444", desc: "Fast leg turnover (6/10)", knob: "med" },
+          { name: "Recovery Spin", duration: 60, minRpm: 75, maxRpm: 85, color: "#22c55e", desc: "Easy spin recovery (3/10)", knob: "low" },
+          { name: "Out of Saddle Climb 3/4", duration: 60, minRpm: 70, maxRpm: 80, color: "#f97316", desc: "Standing power climb (8/10)", knob: "hard" },
+          { name: "Seated High Surge 3/4", duration: 60, minRpm: 90, maxRpm: 100, color: "#ef4444", desc: "Drive the cadence (6/10)", knob: "med" },
+          { name: "Recovery Spin", duration: 60, minRpm: 75, maxRpm: 85, color: "#22c55e", desc: "Flush the legs (3/10)", knob: "low" },
+          { name: "Out of Saddle Climb 4/4", duration: 60, minRpm: 70, maxRpm: 80, color: "#f97316", desc: "Final standing climb (8/10)", knob: "hard" },
+          { name: "Seated High Surge 4/4", duration: 60, minRpm: 90, maxRpm: 100, color: "#ef4444", desc: "Seated sprint push (6/10)", knob: "med" },
+          { name: "Recovery Spin", duration: 60, minRpm: 75, maxRpm: 85, color: "#22c55e", desc: "Prepare for 30s blasts (3/10)", knob: "low" },
+          { name: "Standing Burst 1/2", duration: 30, minRpm: 75, maxRpm: 85, color: "#f97316", desc: "Sharp standing attack (8/10)", knob: "hard" },
+          { name: "Seated Fast Spin 1/2", duration: 30, minRpm: 95, maxRpm: 105, color: "#ef4444", desc: "Seated high speed (6/10)", knob: "med" },
+          { name: "Recovery Spin", duration: 60, minRpm: 75, maxRpm: 85, color: "#22c55e", desc: "Short recovery (3/10)", knob: "low" },
+          { name: "Standing Burst 2/2", duration: 30, minRpm: 80, maxRpm: 90, color: "#f97316", desc: "Out of saddle blast (9/10)", knob: "hard" },
+          { name: "MAX FINISH SPRINT!", duration: 30, minRpm: 110, maxRpm: 125, color: "#ff0055", desc: "ALL-OUT SPRINT! (10/10)", knob: "hard" },
+          { name: "Recovery Spin", duration: 60, minRpm: 75, maxRpm: 85, color: "#22c55e", desc: "Breathe and relax (3/10)", knob: "low" },
+          { name: "Cool Down", duration: 124, minRpm: 65, maxRpm: 75, color: "#38bdf8", desc: "Gentle cool down (2/10)", knob: "low" }
         ]
       },
 
       // 2. Sweet Spot Endurance Training | 30 Minute Workout (V-HmspieYjE)
       "V-HmspieYjE": {
         name: "30m Sweet Spot",
+        offset: 3.5,
         intervals: [
           { name: "Warmup Easy", duration: 60, minRpm: 75, maxRpm: 85, color: "#38bdf8", desc: "Gentle spinning (2/10)" },
           { name: "Warmup Build 1", duration: 120, minRpm: 80, maxRpm: 90, color: "#38bdf8", desc: "Light resistance build (3/10)" },
@@ -1995,6 +2382,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
       // 3. The Full Pyramid | 30 Minute HIIT Indoor Cycling Workout (eNyVyngn0l8)
       "eNyVyngn0l8": {
         name: "30m Full Pyramid",
+        offset: 3.5,
         intervals: [
           { name: "Pyramid Warmup", duration: 240, minRpm: 80, maxRpm: 90, color: "#38bdf8", desc: "Gradual warmup (3/10)" },
           { name: "Pyramid Step 1/10", duration: 60, minRpm: 80, maxRpm: 85, color: "#22c55e", desc: "Step 1: Very Easy (1/10)" },
@@ -2025,6 +2413,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
       // 4. Sprint Surges | 30 Mins Indoor Cycling HIIT Workout (pH4ISSkJ4bw)
       "pH4ISSkJ4bw": {
         name: "32m Sprint Surges",
+        offset: 3.5,
         intervals: [
           { name: "Warmup Intro", duration: 63, minRpm: 75, maxRpm: 85, color: "#38bdf8", desc: "Intro spin (1/10)" },
           { name: "Warmup Build", duration: 60, minRpm: 80, maxRpm: 90, color: "#38bdf8", desc: "Aerobic build (3/10)" },
@@ -2181,7 +2570,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
       const isVideoProg = currentProgram === 'video_sync' || currentProgram === 'auto' || currentProgram.startsWith('v_');
       const elapsed = (player && isVideoProg && typeof player.getCurrentTime === 'function')
-        ? Math.floor(player.getCurrentTime())
+        ? Math.max(0, Math.floor(player.getCurrentTime() - videoSyncOffset))
         : (latestSnapshot ? (latestSnapshot.elapsed_sec || 0) : 0);
       const cad = latestSnapshot ? latestSnapshot.cadence : null;
       updateIntervalEngine(elapsed, cad);
@@ -2223,15 +2612,15 @@ INDEX_HTML = r"""<!DOCTYPE html>
       updateVideoTitle();
       const playBtn = document.getElementById('btn-play');
       if (event.data === YT.PlayerState.PLAYING) {
-        playBtn.textContent = '⏸';
+        playBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
         setWorkoutRunning(true);
       } else if (event.data === YT.PlayerState.PAUSED) {
-        playBtn.textContent = '▶';
+        playBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
         setWorkoutRunning(false);
       }
       const isVideoProg = currentProgram === 'video_sync' || currentProgram === 'auto' || currentProgram.startsWith('v_');
       const elapsed = (player && isVideoProg && typeof player.getCurrentTime === 'function')
-        ? Math.floor(player.getCurrentTime())
+        ? Math.max(0, Math.floor(player.getCurrentTime() - videoSyncOffset))
         : (latestSnapshot ? latestSnapshot.elapsed_sec : 0);
       const cad = latestSnapshot ? latestSnapshot.cadence : null;
       updateIntervalEngine(elapsed, cad);
@@ -2259,7 +2648,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
       const isVideoProg = currentProgram === 'video_sync' || currentProgram === 'auto' || currentProgram.startsWith('v_');
       const elapsed = (player && isVideoProg && typeof player.getCurrentTime === 'function')
-        ? Math.floor(player.getCurrentTime())
+        ? Math.max(0, Math.floor(player.getCurrentTime() - videoSyncOffset))
         : (latestSnapshot ? latestSnapshot.elapsed_sec : 0);
       const cad = latestSnapshot ? latestSnapshot.cadence : null;
       updateIntervalEngine(elapsed, cad);
@@ -2353,6 +2742,28 @@ INDEX_HTML = r"""<!DOCTYPE html>
       });
     }
 
+    let lastAutoKnob = null;
+
+    function knobFromInterval(iv) {
+      if (!iv) return null;
+      if (iv.knob === 'low' || iv.knob === 'med' || iv.knob === 'hard') return iv.knob;
+      const blob = ((iv.name || '') + ' ' + (iv.desc || '')).toLowerCase();
+      const m = blob.match(/\((\d+)\s*\/\s*10\)/);
+      if (m) {
+        const n = +m[1];
+        if (n >= 8) return 'hard';
+        if (n >= 5) return 'med';
+        return 'low';
+      }
+      if (/climb|heavy|sprint|surge|tabata|max effort|all-out|peak/.test(blob)) return 'hard';
+      if (/recover|rest|warmup|warm-up|cool|easy|release|flush|gentle|intro/.test(blob)) return 'low';
+      return null;
+    }
+
+    function knobLabel(k) {
+      return {low: 'LOW 1', med: 'MED 1/4', hard: 'HARD 1/16'}[k] || '';
+    }
+
     function updateIntervalEngine(elapsedSec, currentCadence) {
       const cueTitle = document.getElementById('cue-title');
       const cueTarget = document.getElementById('cue-target');
@@ -2376,7 +2787,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
       if (isVideoProg && player && typeof player.getCurrentTime === 'function') {
         const curTime = player.getCurrentTime();
         if (curTime >= 0) {
-          effectiveElapsed = Math.floor(curTime);
+          const profileOffset = (prog && typeof prog.offset === 'number') ? prog.offset : videoSyncOffset;
+          effectiveElapsed = Math.max(0, Math.floor(curTime - profileOffset));
         }
       }
 
@@ -2425,7 +2837,17 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
       cueTitle.textContent = activeInterval.name;
       cueTitle.style.color = activeInterval.color;
-      cueTarget.textContent = `🎯 ${activeInterval.minRpm}–${activeInterval.maxRpm} RPM`;
+      const autoKnob = knobFromInterval(activeInterval);
+      const rpmTxt = `${activeInterval.minRpm}–${activeInterval.maxRpm} RPM`;
+      if (autoKnob && autoKnob !== lastAutoKnob) {
+        lastAutoKnob = autoKnob;
+        setKnob(autoKnob);
+        cueTarget.textContent = `🎯 ${rpmTxt} · TURN ${knobLabel(autoKnob)}`;
+      } else if (autoKnob) {
+        cueTarget.textContent = `🎯 ${rpmTxt} · ${knobLabel(autoKnob)}`;
+      } else {
+        cueTarget.textContent = `🎯 ${rpmTxt}`;
+      }
       cueTarget.style.borderColor = activeInterval.color;
       cueTarget.style.color = activeInterval.color;
       cueFill.style.width = `${pct}%`;
@@ -2467,6 +2889,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
     let latestSnapshot = null;
 
     function updateHUD(d) {
+      d = scaleIfOldServer(d);
       latestSnapshot = d;
 
       // Cadence
@@ -2495,9 +2918,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
       // Power Meter
       document.getElementById('val-watts').textContent = (d.watts !== null && d.watts !== undefined) ? d.watts : 0;
-      document.getElementById('val-wkg').textContent = (d.w_kg || 0).toFixed(1);
       document.getElementById('val-avg-watts').textContent = (d.avg_watts !== null && d.avg_watts !== undefined) ? d.avg_watts : '—';
       document.getElementById('val-max-watts').textContent = (d.max_watts !== null && d.max_watts !== undefined) ? d.max_watts : '—';
+      const knobEl = document.getElementById('val-knob');
+      if (knobEl) knobEl.textContent = d.knob_label || 'LOW 1';
 
       // Heart Rate & Zone
       const hrEl = document.getElementById('val-hr');
@@ -2529,12 +2953,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
       const toggleBtn = document.getElementById('btn-timer-toggle');
       const workoutStatusEl = document.getElementById('workout-status');
       if (d.is_running) {
-        toggleBtn.textContent = '⏸';
+        toggleBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
         toggleBtn.title = 'Pause Workout Timer';
         workoutStatusEl.textContent = 'Active Session';
         workoutStatusEl.style.color = 'var(--text-muted)';
       } else {
-        toggleBtn.textContent = '▶';
+        toggleBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
         toggleBtn.title = 'Start / Resume Workout Timer';
         workoutStatusEl.textContent = 'Workout Paused';
         workoutStatusEl.style.color = '#f59e0b';
@@ -2548,10 +2972,36 @@ INDEX_HTML = r"""<!DOCTYPE html>
         const dotHr = document.getElementById('dot-hr');
         const dotCad = document.getElementById('dot-cad');
         const dotSpd = document.getElementById('dot-spd');
+        const dotPower = document.getElementById('dot-power');
+        const pwrBadge = document.getElementById('badge-power-source');
+        const pwrLabelBadge = document.getElementById('label-pwr-badge');
 
         dotHr.classList.toggle('active', !!(d.sensors.hr && d.sensors.hr.connected));
         dotCad.classList.toggle('active', !!(d.sensors.cadence && d.sensors.cadence.connected));
         dotSpd.classList.toggle('active', !!(d.sensors.speed && d.sensors.speed.connected));
+
+        const isPowerConnected = (d.sensors.power && d.sensors.power.connected) || (d.sensors.ftms && d.sensors.ftms.connected);
+        if (dotPower) dotPower.classList.toggle('active', !!isPowerConnected);
+
+        const pSrc = (d.power_source || 'estimated').toUpperCase();
+        if (pwrBadge) {
+          if (pSrc === 'METER') {
+            pwrBadge.textContent = 'METER';
+            pwrBadge.style.background = 'rgba(14,165,233,0.3)';
+            pwrBadge.style.color = '#38bdf8';
+          } else if (pSrc === 'FTMS') {
+            pwrBadge.textContent = 'FTMS';
+            pwrBadge.style.background = 'rgba(168,85,247,0.3)';
+            pwrBadge.style.color = '#c084fc';
+          } else {
+            pwrBadge.textContent = 'EST';
+            pwrBadge.style.background = 'rgba(245,158,11,0.25)';
+            pwrBadge.style.color = '#f59e0b';
+          }
+        }
+        if (pwrLabelBadge) {
+          pwrLabelBadge.textContent = `PWR [${pSrc === 'METER' ? 'METER' : (pSrc === 'FTMS' ? 'FTMS' : 'EST')}]`;
+        }
 
         if (d.sensors.hr) dotHr.parentElement.title = `HR: ${d.sensors.hr.name}`;
         if (d.sensors.cadence) dotCad.parentElement.title = `CAD: ${d.sensors.cadence.name}`;
@@ -2594,6 +3044,48 @@ INDEX_HTML = r"""<!DOCTYPE html>
       document.getElementById('summary-modal').classList.remove('open');
     }
 
+    const KNOB_FACTOR = {low: 1, med: 2, hard: 3.5};
+    const KNOB_LABEL = {low: 'LOW 1', med: 'MED 1/4', hard: 'HARD 1/16'};
+    const KNOB_ORDER = ['low', 'med', 'hard'];
+    let localKnob = 'low';
+
+    function scaleIfOldServer(d) {
+      if (d.knob) return d;
+      const f = KNOB_FACTOR[localKnob] || 1;
+      const sc = (n) => (n === null || n === undefined) ? n : Math.round(n * f);
+      return Object.assign({}, d, {
+        watts: sc(d.watts || 0),
+        avg_watts: sc(d.avg_watts),
+        max_watts: sc(d.max_watts),
+        w_kg: d.w_kg ? Math.round(d.w_kg * f * 10) / 10 : d.w_kg,
+        knob_label: KNOB_LABEL[localKnob]
+      });
+    }
+
+    function nudgeKnob(tighten) {
+      fetch('/api/knob', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({dir: tighten ? 'tighten' : 'loosen'})
+      }).then((r) => { if (!r.ok) throw 0; }).catch(() => {
+        let i = KNOB_ORDER.indexOf(localKnob);
+        if (i < 0) i = 0;
+        if (tighten && i < 2) i++;
+        else if (!tighten && i > 0) i--;
+        localKnob = KNOB_ORDER[i];
+      });
+    }
+
+    function setKnob(level) {
+      fetch('/api/knob', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({knob: level})
+      }).then((r) => { if (!r.ok) throw 0; }).catch(() => {
+        if (KNOB_FACTOR[level]) localKnob = level;
+      });
+    }
+
     // Keyboard Shortcuts
     document.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
@@ -2610,9 +3102,36 @@ INDEX_HTML = r"""<!DOCTYPE html>
         toggleHUD();
       } else if (e.code === 'KeyL') {
         cycleLayout();
+      } else if (e.code === 'KeyM') {
+        const menuToggle = document.getElementById('btn-menu-toggle');
+        const controlsMenu = document.getElementById('controls-dropdown-menu');
+        if (menuToggle && controlsMenu) {
+          const isOpen = controlsMenu.classList.toggle('open');
+          menuToggle.classList.toggle('active', isOpen);
+        }
       } else if (e.code === 'KeyS') {
         const sm = document.getElementById('summary-modal');
         if (sm.classList.contains('open')) closeSummary(); else showSummary();
+      } else if (e.key === '[' || e.code === 'BracketLeft') {
+        nudgeKnob(true);
+      } else if (e.key === ']' || e.code === 'BracketRight') {
+        nudgeKnob(false);
+      } else if (e.key === '1') {
+        setKnob('low');
+      } else if (e.key === '2') {
+        setKnob('med');
+      } else if (e.key === '3') {
+        setKnob('hard');
+      } else if (e.key === '<' || e.key === ',') {
+        videoSyncOffset = Math.max(0, Math.round((videoSyncOffset - 0.5) * 10) / 10);
+        try { localStorage.setItem('spin_hud_video_offset', videoSyncOffset); } catch (e) {}
+        const desc = document.getElementById('cue-desc');
+        if (desc) desc.textContent = `⏱️ Video Sync Offset: ${videoSyncOffset}s`;
+      } else if (e.key === '>' || e.key === '.') {
+        videoSyncOffset = Math.round((videoSyncOffset + 0.5) * 10) / 10;
+        try { localStorage.setItem('spin_hud_video_offset', videoSyncOffset); } catch (e) {}
+        const desc = document.getElementById('cue-desc');
+        if (desc) desc.textContent = `⏱️ Video Sync Offset: ${videoSyncOffset}s`;
       }
     });
 
@@ -2635,14 +3154,15 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
       const btn = document.getElementById('btn-layout');
       if (btn) {
+        const label = btn.querySelector('.menu-item-label');
         if (currentLayout === 'left') {
-          btn.textContent = '⬅️';
+          if (label) label.textContent = 'Layout: Left Stack'; else btn.textContent = '⬅️';
           btn.title = 'HUD Layout: Left Stack (Click or press L to switch)';
         } else if (currentLayout === 'right') {
-          btn.textContent = '➡️';
+          if (label) label.textContent = 'Layout: Right Stack'; else btn.textContent = '➡️';
           btn.title = 'HUD Layout: Right Stack (Click or press L to switch)';
         } else {
-          btn.textContent = '⬇️';
+          if (label) label.textContent = 'Layout: Bottom Bar'; else btn.textContent = '⬇️';
           btn.title = 'HUD Layout: Bottom Bar (Click or press L to switch)';
         }
       }
@@ -2701,12 +3221,103 @@ INDEX_HTML = r"""<!DOCTYPE html>
       }
     });
 
+    // Expandable Controls Menu
+    const menuToggle = document.getElementById('btn-menu-toggle');
+    const controlsMenu = document.getElementById('controls-dropdown-menu');
+    if (menuToggle && controlsMenu) {
+      menuToggle.onclick = (e) => {
+        e.stopPropagation();
+        const isOpen = controlsMenu.classList.toggle('open');
+        menuToggle.classList.toggle('active', isOpen);
+      };
+
+      document.addEventListener('click', (e) => {
+        if (!controlsMenu.contains(e.target) && e.target !== menuToggle && !menuToggle.contains(e.target)) {
+          controlsMenu.classList.remove('open');
+          menuToggle.classList.remove('active');
+        }
+      });
+
+      controlsMenu.querySelectorAll('.menu-item-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          controlsMenu.classList.remove('open');
+          menuToggle.classList.remove('active');
+        });
+      });
+    }
+
     document.getElementById('btn-summary').onclick = showSummary;
     document.getElementById('btn-close-summary').onclick = closeSummary;
     document.getElementById('btn-done-summary').onclick = closeSummary;
     document.getElementById('btn-export-tcx').onclick = () => {
       window.location.href = '/api/workout/export.tcx';
     };
+
+    function currentRideMeta() {
+      let title = 'Spin Studio';
+      let url = '';
+      try {
+        if (player && player.getVideoData) {
+          const id = player.getVideoData().video_id;
+          if (id) {
+            url = 'https://www.youtube.com/watch?v=' + id;
+            if (videoTitleCache[id]) title = videoTitleCache[id];
+          }
+        }
+      } catch (e) {}
+      const desc = (url ? (title + '\n' + url + '\n\n') : '') + 'Virtual watts from Spin Studio (pad-brake estimate).';
+      return { name: title, description: desc };
+    }
+
+    function setStravaStatus(d) {
+      const el = document.getElementById('strava-status');
+      const conn = document.getElementById('btn-strava-connect');
+      const disc = document.getElementById('btn-strava-disconnect');
+      if (!el) return;
+      if (!d || !d.configured) {
+        el.textContent = 'Drop client id/secret into strava-app.json (same app as Gear Tracker). Callback domain must allow localhost.';
+        if (conn) conn.style.display = 'none';
+        if (disc) disc.style.display = 'none';
+        return;
+      }
+      if (d.connected) {
+        el.textContent = d.athlete ? ('Connected as ' + d.athlete) : 'Connected';
+        if (conn) conn.style.display = 'none';
+        if (disc) disc.style.display = '';
+      } else {
+        el.textContent = 'Not connected';
+        if (conn) conn.style.display = '';
+        if (disc) disc.style.display = 'none';
+      }
+    }
+
+    function refreshStravaStatus() {
+      fetch('/api/strava/status').then(r => r.json()).then(setStravaStatus).catch(() => {});
+    }
+
+    function uploadToStrava() {
+      const status = document.getElementById('strava-upload-status');
+      if (status) status.textContent = 'Posting…';
+      const meta = currentRideMeta();
+      fetch('/api/strava/upload', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(meta)
+      }).then(r => r.json().then(d => ({ok: r.ok, d}))).then(({ok, d}) => {
+        if (!status) return;
+        if (d && d.already) status.textContent = 'Already posted this ride.';
+        else if (d && d.ok) status.textContent = 'Posted to Strava.';
+        else status.textContent = (d && d.error) ? d.error : 'Post failed';
+      }).catch(() => { if (status) status.textContent = 'Post failed'; });
+    }
+
+    document.getElementById('btn-strava-connect').onclick = () => { window.location.href = '/api/strava/login'; };
+    document.getElementById('btn-strava-disconnect').onclick = () => {
+      fetch('/api/strava/disconnect', { method: 'POST' }).then(() => refreshStravaStatus());
+    };
+    document.getElementById('btn-strava-upload').onclick = uploadToStrava;
+    if (new URLSearchParams(location.search).get('strava') === 'ok') refreshStravaStatus();
+
 
     document.getElementById('btn-timer-toggle').onclick = () => {
       fetch('/api/workout/toggle', { method: 'POST' }).then(() => {
@@ -2740,6 +3351,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
     document.getElementById('btn-settings').onclick = () => {
       const modalSelect = document.getElementById('select-program');
       if (modalSelect) modalSelect.value = currentProgram;
+      const offsetInput = document.getElementById('input-video-offset');
+      if (offsetInput) offsetInput.value = videoSyncOffset;
+      refreshStravaStatus();
       modal.classList.add('open');
     };
     document.getElementById('btn-close-modal').onclick = () => modal.classList.remove('open');
@@ -2749,6 +3363,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
       const wheel = parseFloat(document.getElementById('input-wheel').value);
       const maxhr = parseInt(document.getElementById('input-maxhr').value);
       const weight = parseFloat(document.getElementById('input-weight').value);
+      const vOffset = parseFloat(document.getElementById('input-video-offset').value);
+      if (!isNaN(vOffset)) {
+        videoSyncOffset = Math.max(0, vOffset);
+        try { localStorage.setItem('spin_hud_video_offset', videoSyncOffset); } catch (e) {}
+      }
       setProgram(document.getElementById('select-program').value, true);
       
       fetch('/api/settings', {
@@ -2768,6 +3387,176 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
     document.getElementById('btn-layout').onclick = cycleLayout;
     document.getElementById('select-layout').onchange = (e) => setLayout(e.target.value);
+
+    document.getElementById('btn-export-fit').onclick = () => {
+      window.location.href = '/api/workout/export.fit';
+    };
+
+    // History Modal
+    const historyModal = document.getElementById('history-modal');
+    document.getElementById('btn-history').onclick = () => {
+      loadHistory();
+      historyModal.classList.add('open');
+    };
+    document.getElementById('btn-close-history').onclick = () => historyModal.classList.remove('open');
+
+    function loadHistory() {
+      const loading = document.getElementById('history-loading');
+      const table = document.getElementById('history-table');
+      const tbody = document.getElementById('history-table-body');
+      loading.style.display = 'block';
+      table.style.display = 'none';
+      tbody.innerHTML = '';
+      fetch('/api/history')
+        .then(r => r.json())
+        .then(rides => {
+          loading.style.display = 'none';
+          if (!rides || rides.length === 0) {
+            loading.textContent = 'No past rides recorded yet. Complete a workout to auto-save to SQLite!';
+            loading.style.display = 'block';
+            return;
+          }
+          table.style.display = 'table';
+          rides.forEach(r => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid rgba(255,255,255,0.08)';
+            const dt = new Date(r.started_at);
+            const dateStr = dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const mins = Math.floor(r.duration_sec / 60);
+            const secs = r.duration_sec % 60;
+            const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+            const distStr = isImperial ? `${r.distance_mi.toFixed(2)} mi` : `${r.distance_km.toFixed(2)} km`;
+            const wattsStr = r.avg_watts ? `${r.avg_watts} W` : '—';
+            const hrStr = r.avg_hr ? `${r.avg_hr} bpm` : '—';
+            tr.innerHTML = `
+              <td style="padding: 10px 8px; font-family:'JetBrains Mono'; font-size:12px;">${dateStr}</td>
+              <td style="padding: 10px 8px; font-weight:700;">${r.workout_name || 'Spin Ride'}</td>
+              <td style="padding: 10px 8px; font-family:'JetBrains Mono';">${timeStr}</td>
+              <td style="padding: 10px 8px; font-family:'JetBrains Mono';">${distStr}</td>
+              <td style="padding: 10px 8px; font-family:'JetBrains Mono'; color:var(--accent-cyan);">${wattsStr}</td>
+              <td style="padding: 10px 8px; font-family:'JetBrains Mono'; color:var(--accent-red);">${hrStr}</td>
+              <td style="padding: 10px 8px; white-space:nowrap;">
+                <a href="/api/history/${r.id}/export.fit" style="color:var(--accent-cyan); text-decoration:none; margin-right:8px; font-weight:700;">.FIT</a>
+                <button onclick="deleteRide(${r.id})" style="background:none; border:none; color:var(--accent-red); cursor:pointer; font-weight:700;">✕</button>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+        })
+        .catch(() => {
+          loading.textContent = 'Failed to load history.';
+        });
+    }
+
+    window.deleteRide = function(id) {
+      if (!confirm('Delete this ride record?')) return;
+      fetch('/api/history/' + id, { method: 'DELETE' }).then(() => loadHistory());
+    };
+
+    // Workout Importer
+    const fileInput = document.getElementById('workout-file-input');
+    document.getElementById('btn-import-workout').onclick = () => fileInput.click();
+    fileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      fetch('/api/workouts/import', {
+        method: 'POST',
+        body: formData
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.ok && data.workout) {
+          applyImportedWorkout(data.workout);
+        } else {
+          alert('Import failed: ' + ((data && data.error) ? data.error : 'Unknown error'));
+        }
+      })
+      .catch(err => alert('Import error: ' + err));
+      fileInput.value = '';
+    };
+
+    // Global fetch interceptor to trigger LAN PIN Pairing Modal on 401 Unauthorized
+    const origFetch = window.fetch;
+    window.fetch = async function(...args) {
+      const res = await origFetch.apply(this, args);
+      if (res && res.status === 401) {
+        openPinModal();
+      }
+      return res;
+    };
+
+    function openPinModal() {
+      const pinModal = document.getElementById('pin-modal');
+      if (pinModal) {
+        pinModal.classList.add('open');
+        const input = document.getElementById('input-lan-pin');
+        if (input) {
+          input.value = '';
+          input.focus();
+        }
+      }
+    }
+
+    function applyImportedWorkout(w) {
+      if (!w || !w.steps) return;
+      const progKey = 'custom_' + (w.id || Date.now());
+      const select = document.getElementById('quick-select-program');
+      if (select) {
+        const opt = document.createElement('option');
+        opt.value = progKey;
+        opt.textContent = '📥 ' + w.name;
+        select.appendChild(opt);
+        select.value = opt.value;
+      }
+      const modalSelect = document.getElementById('select-program');
+      if (modalSelect) {
+        const opt2 = document.createElement('option');
+        opt2.value = progKey;
+        opt2.textContent = '📥 ' + w.name;
+        modalSelect.appendChild(opt2);
+      }
+      WORKOUT_PROGRAMS[progKey] = {
+        name: w.name,
+        intervals: w.steps.map(s => ({
+          name: s.name,
+          duration: s.duration_sec,
+          minRpm: s.cadence_low || s.cadence_target || 70,
+          maxRpm: s.cadence_high || (s.cadence_target ? s.cadence_target + 10 : 90),
+          color: s.color || '#38bdf8',
+          desc: s.cue_message || (s.target_watts ? `${s.target_watts}W Target` : `${Math.round((s.power_low_pct||1)*100)}% FTP`),
+          knob: s.knob || 'med'
+        }))
+      };
+      setProgram(progKey, false);
+    }
+
+    // LAN Pairing PIN Modal
+    const pinModal = document.getElementById('pin-modal');
+    const btnPin = document.getElementById('btn-pin');
+    if (btnPin) btnPin.onclick = openPinModal;
+    document.getElementById('btn-close-pin').onclick = () => pinModal.classList.remove('open');
+    document.getElementById('btn-submit-pin').onclick = () => {
+      const pin = document.getElementById('input-lan-pin').value.trim();
+      origFetch('/api/auth/pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.ok) {
+          pinModal.classList.remove('open');
+          document.getElementById('pin-error-msg').textContent = '';
+        } else {
+          document.getElementById('pin-error-msg').textContent = 'Invalid PIN. Check terminal.';
+        }
+      })
+      .catch(() => {
+        document.getElementById('pin-error-msg').textContent = 'Authentication failed.';
+      });
+    };
 
     // Live Clocks
     function updateClock() {
