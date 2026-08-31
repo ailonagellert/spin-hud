@@ -1549,6 +1549,31 @@ INDEX_HTML = r"""<!DOCTYPE html>
       background: rgba(255, 255, 255, 0.32);
     }
 
+    .touch-btn-finish {
+      height: 46px;
+      padding: 0 14px;
+      gap: 6px;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.35));
+      border: 1px solid rgba(16, 185, 129, 0.6);
+      color: #34d399;
+      font-family: 'Inter', sans-serif;
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: 0.8px;
+    }
+
+    .touch-btn-finish:hover {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.45), rgba(5, 150, 105, 0.7));
+      border-color: #34d399;
+      color: #fff;
+      transform: translateY(-2px) scale(1.04);
+      box-shadow: 0 0 18px rgba(16, 185, 129, 0.45);
+    }
+
+    .touch-btn-finish:active {
+      transform: translateY(1px) scale(0.95);
+    }
+
     .touch-btn-master-play {
       width: 56px;
       height: 56px;
@@ -2250,31 +2275,25 @@ INDEX_HTML = r"""<!DOCTYPE html>
           </div>
 
           <div class="master-touch-controls">
-            <button id="btn-prev" class="touch-btn touch-btn-nav" title="Previous Track (P)" aria-label="Previous Track">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <polygon points="19 20 9 12 19 4 19 20"></polygon>
-                <line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line>
-              </svg>
-            </button>
-
             <button id="btn-play" class="touch-btn touch-btn-master-play" title="Master Play / Pause Workout & Video (Space)" aria-label="Master Play or Pause">
               <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
                 <polygon points="6 4 20 12 6 20 6 4"></polygon>
               </svg>
             </button>
 
-            <button id="btn-next" class="touch-btn touch-btn-nav" title="Next Track (N)" aria-label="Next Track">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <polygon points="5 4 15 12 5 20 5 4"></polygon>
-                <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line>
-              </svg>
-            </button>
-
-            <button id="btn-reset-timer" class="touch-btn touch-btn-reset" title="Reset Workout Session" aria-label="Reset Workout Session">
+            <button id="btn-reset-timer" class="touch-btn touch-btn-reset" title="Reset Workout Session (↺)" aria-label="Reset Workout Session">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="1 4 1 10 7 10"></polyline>
                 <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
               </svg>
+            </button>
+
+            <button id="btn-finish-workout" class="touch-btn touch-btn-finish" title="Complete Workout & Save (C / Enter)" aria-label="Complete Workout">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                <line x1="4" y1="22" x2="4" y2="15"></line>
+              </svg>
+              <span>FINISH</span>
             </button>
           </div>
         </div>
@@ -3385,10 +3404,14 @@ INDEX_HTML = r"""<!DOCTYPE html>
     }
 
     // Wire Buttons
-    document.getElementById('btn-play').onclick = toggleMasterPlayPause;
-    document.getElementById('btn-next').onclick = nextVideo;
-    document.getElementById('btn-prev').onclick = prevVideo;
-    document.getElementById('btn-fs').onclick = toggleFullscreen;
+    const btnPlay = document.getElementById('btn-play');
+    if (btnPlay) btnPlay.onclick = toggleMasterPlayPause;
+    const btnNext = document.getElementById('btn-next');
+    if (btnNext) btnNext.onclick = nextVideo;
+    const btnPrev = document.getElementById('btn-prev');
+    if (btnPrev) btnPrev.onclick = prevVideo;
+    const btnFs = document.getElementById('btn-fs');
+    if (btnFs) btnFs.onclick = toggleFullscreen;
     document.getElementById('btn-playlist-toggle').onclick = (e) => {
       e.stopPropagation();
       togglePlaylistDrawer();
