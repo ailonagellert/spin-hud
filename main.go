@@ -171,7 +171,7 @@ func main() {
 	if !*noBrowser {
 		go func() {
 			time.Sleep(1 * time.Second)
-			openBrowser(fmt.Sprintf("http://localhost:%d", *port))
+			openBrowser(fmt.Sprintf("http://localhost:%d/launcher", *port))
 		}()
 	}
 

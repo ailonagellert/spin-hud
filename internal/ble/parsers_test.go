@@ -212,4 +212,3 @@ func TestParseFTMSIndoorBike(t *testing.T) {
 		t.Fatalf("unexpected power: %v", data.PowerWatts)
 	}
 }
-

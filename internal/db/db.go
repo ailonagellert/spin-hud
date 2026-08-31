@@ -479,4 +479,3 @@ func (d *DB) GetWorkout(id string) (*workout.Workout, error) {
 	}
 	return &w, nil
 }
-

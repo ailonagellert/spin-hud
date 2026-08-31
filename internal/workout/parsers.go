@@ -15,15 +15,15 @@ type WorkoutStep struct {
 	Name          string  `json:"name"`
 	Type          string  `json:"type"` // warmup, cooldown, steady, interval, freeride
 	DurationSec   int     `json:"duration_sec"`
-	PowerLowPct   float64 `json:"power_low_pct,omitempty"`   // fraction of FTP (e.g. 0.85 = 85%)
-	PowerHighPct  float64 `json:"power_high_pct,omitempty"`  // fraction of FTP
-	TargetWatts   int     `json:"target_watts,omitempty"`    // absolute watts if specified
-	CadenceTarget int     `json:"cadence_target,omitempty"`  // target RPM
-	CadenceLow    int     `json:"cadence_low,omitempty"`     // RPM range low
-	CadenceHigh   int     `json:"cadence_high,omitempty"`    // RPM range high
-	Knob          string  `json:"knob,omitempty"`            // low, med, hard
-	Color         string  `json:"color,omitempty"`           // UI hex color
-	CueMessage    string  `json:"cue_message,omitempty"`     // coaching cue or description
+	PowerLowPct   float64 `json:"power_low_pct,omitempty"`  // fraction of FTP (e.g. 0.85 = 85%)
+	PowerHighPct  float64 `json:"power_high_pct,omitempty"` // fraction of FTP
+	TargetWatts   int     `json:"target_watts,omitempty"`   // absolute watts if specified
+	CadenceTarget int     `json:"cadence_target,omitempty"` // target RPM
+	CadenceLow    int     `json:"cadence_low,omitempty"`    // RPM range low
+	CadenceHigh   int     `json:"cadence_high,omitempty"`   // RPM range high
+	Knob          string  `json:"knob,omitempty"`           // low, med, hard
+	Color         string  `json:"color,omitempty"`          // UI hex color
+	CueMessage    string  `json:"cue_message,omitempty"`    // coaching cue or description
 }
 
 // Workout represents a complete structured training session or scenario.

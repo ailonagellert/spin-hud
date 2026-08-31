@@ -182,5 +182,3 @@ func (s *State) maybeRecordTrackpointLocked(now time.Time) {
 		Watts:    currentWatts,
 	})
 }
-
-

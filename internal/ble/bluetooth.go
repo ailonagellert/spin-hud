@@ -845,4 +845,3 @@ func (m *bleManager) connectFTMS(state *session.State, addr bluetooth.Address, l
 	state.SetSensor("ftms", true, label)
 	log.Printf("BLE: Connected FTMS Trainer: %s (%s)", label, addr.String())
 }
-

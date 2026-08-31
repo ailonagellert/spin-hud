@@ -28,7 +28,6 @@ func ParseHR(data []byte) (int, bool) {
 	return int(data[1]), true
 }
 
-
 // ParseCSCCrank parses crank cadence (RPM) from a CSC measurement (0x2A5B).
 // Returns (rpm, ok, newRef). A counter reset/discontinuity or implausible
 // reading yields 0.0 with ok=true so the UI shows zero rather than a spike.
@@ -227,4 +226,3 @@ func ParseFTMSIndoorBike(data []byte) (FTMSData, bool) {
 
 	return res, true
 }
-

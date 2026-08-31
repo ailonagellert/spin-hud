@@ -24,43 +24,42 @@ type SensorsSnapshot struct {
 // Snapshot is the exact JSON shape served on /api/telemetry (SSE).
 // Field names and null semantics must match spin_hud.py get_snapshot.
 type Snapshot struct {
-	HR            *int           `json:"hr"`
-	AvgHR         *int           `json:"avg_hr"`
-	MaxHR         *int           `json:"max_hr"`
-	HRZone        int            `json:"hr_zone"`
-	HRZoneName    string         `json:"hr_zone_name"`
-	HRZonePct     int            `json:"hr_zone_pct"`
-	HRZoneColor   string         `json:"hr_zone_color"`
-	Cadence       *int           `json:"cadence"`
-	AvgCadence    *int           `json:"avg_cadence"`
-	MaxCadence    *int           `json:"max_cadence"`
-	SpeedMPH      *float64       `json:"speed_mph"`
-	AvgSpeedMPH   *float64       `json:"avg_speed_mph"`
-	MaxSpeedMPH   *float64       `json:"max_speed_mph"`
-	SpeedKMH      *float64       `json:"speed_kmh"`
-	AvgSpeedKMH   *float64       `json:"avg_speed_kmh"`
-	MaxSpeedKMH   *float64       `json:"max_speed_kmh"`
-	Watts         int            `json:"watts"`
-	AvgWatts      *int           `json:"avg_watts"`
-	MaxWatts      *int           `json:"max_watts"`
-	PowerSource   string         `json:"power_source"`
-	WKg           float64        `json:"w_kg"`
-	AvgWKg        *float64       `json:"avg_w_kg"`
-	DistanceMi    float64        `json:"distance_mi"`
-	DistanceKm    float64        `json:"distance_km"`
-	Calories      int            `json:"calories"`
-	ElapsedSec    int            `json:"elapsed_sec"`
-	IsRunning     bool           `json:"is_running"`
+	HR            *int            `json:"hr"`
+	AvgHR         *int            `json:"avg_hr"`
+	MaxHR         *int            `json:"max_hr"`
+	HRZone        int             `json:"hr_zone"`
+	HRZoneName    string          `json:"hr_zone_name"`
+	HRZonePct     int             `json:"hr_zone_pct"`
+	HRZoneColor   string          `json:"hr_zone_color"`
+	Cadence       *int            `json:"cadence"`
+	AvgCadence    *int            `json:"avg_cadence"`
+	MaxCadence    *int            `json:"max_cadence"`
+	SpeedMPH      *float64        `json:"speed_mph"`
+	AvgSpeedMPH   *float64        `json:"avg_speed_mph"`
+	MaxSpeedMPH   *float64        `json:"max_speed_mph"`
+	SpeedKMH      *float64        `json:"speed_kmh"`
+	AvgSpeedKMH   *float64        `json:"avg_speed_kmh"`
+	MaxSpeedKMH   *float64        `json:"max_speed_kmh"`
+	Watts         int             `json:"watts"`
+	AvgWatts      *int            `json:"avg_watts"`
+	MaxWatts      *int            `json:"max_watts"`
+	PowerSource   string          `json:"power_source"`
+	WKg           float64         `json:"w_kg"`
+	AvgWKg        *float64        `json:"avg_w_kg"`
+	DistanceMi    float64         `json:"distance_mi"`
+	DistanceKm    float64         `json:"distance_km"`
+	Calories      int             `json:"calories"`
+	ElapsedSec    int             `json:"elapsed_sec"`
+	IsRunning     bool            `json:"is_running"`
 	Sensors       SensorsSnapshot `json:"sensors"`
-	Status        string         `json:"status"`
-	PlaylistID    string         `json:"playlist_id"`
-	WorkoutName   string         `json:"workout_name,omitempty"`
-	RiderWeightKg float64        `json:"rider_weight_kg"`
-	Knob          string         `json:"knob"`
-	KnobLabel     string         `json:"knob_label"`
-	KnobTurns     float64        `json:"knob_turns"`
+	Status        string          `json:"status"`
+	PlaylistID    string          `json:"playlist_id"`
+	WorkoutName   string          `json:"workout_name,omitempty"`
+	RiderWeightKg float64         `json:"rider_weight_kg"`
+	Knob          string          `json:"knob"`
+	KnobLabel     string          `json:"knob_label"`
+	KnobTurns     float64         `json:"knob_turns"`
 }
-
 
 // Trackpoint is a periodic sample recorded for TCX export (every 2s while running).
 type Trackpoint struct {
@@ -73,9 +72,9 @@ type Trackpoint struct {
 }
 
 const (
-	DefaultMaxHR        = 190
-	DefaultPlaylistID   = "PLBE6A702D02AB879D"
-	DefaultWheelCircM   = 1.4363 // 18" flywheel circumference (pi * 18" = 1436 mm)
+	DefaultMaxHR         = 190
+	DefaultPlaylistID    = "PLBE6A702D02AB879D"
+	DefaultWheelCircM    = 1.4363 // 18" flywheel circumference (pi * 18" = 1436 mm)
 	DefaultRiderWeightKg = 75.0
 )
 
@@ -527,4 +526,3 @@ func ExtractPlaylistID(s string) string {
 	}
 	return s
 }
-
