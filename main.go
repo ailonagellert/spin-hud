@@ -133,7 +133,9 @@ func main() {
 	} else {
 		defer database.Close()
 		// Crash recovery: restore any unfinished workout session checkpoint from an earlier crash
-		if recID, recErr := database.RecoverActiveSession(); recErr == nil && recID > 0 {
+		if recID, recErr := database.RecoverActiveSession(); recErr != nil {
+			log.Printf("[RECOVERY ERROR] Failed to restore active session checkpoint: %v", recErr)
+		} else if recID > 0 {
 			log.Printf("[RECOVERY] Restored unfinished ride session from previous crash (Saved as Ride #%d)", recID)
 		}
 		// Load persisted settings

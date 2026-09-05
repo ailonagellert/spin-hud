@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -93,10 +94,12 @@ func (s *Server) runCheckpointer() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
+		s.saveMu.Lock()
 		snap := s.State.GetSnapshot()
 		if snap.IsRunning && snap.ElapsedSec >= 5 {
 			_ = s.DB.CheckpointActiveSession(snap, s.State.WorkoutStartWall(), s.State.WorkoutEndWall(), s.State.GetTrackpoints(), snap.WorkoutName)
 		}
+		s.saveMu.Unlock()
 	}
 }
 
@@ -375,12 +378,12 @@ func (s *Server) handleFITExport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) autoSaveCurrentRide() (int64, error) {
-	if s.DB == nil {
-		return 0, nil
-	}
 	snap := s.State.GetSnapshot()
 	if snap.ElapsedSec < 5 {
 		return 0, nil // ignore accidental momentary restarts under 5s
+	}
+	if s.DB == nil {
+		return 0, errors.New("database storage unavailable")
 	}
 	start := s.State.WorkoutStartWall()
 	s.hubMu.Lock()
@@ -598,12 +601,24 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	s.State.ApplySettings(newPl, newCirc, newMaxHR, newWeight)
 	if s.DB != nil {
-		_ = s.DB.SaveSetting("playlist_id", newPl)
-		_ = s.DB.SaveSetting("wheel_circ_m", fmt.Sprintf("%f", newCirc))
-		_ = s.DB.SaveSetting("max_hr", fmt.Sprintf("%d", newMaxHR))
-		_ = s.DB.SaveSetting("rider_weight_kg", fmt.Sprintf("%f", newWeight))
+		settingsMap := map[string]string{
+			"playlist_id":     newPl,
+			"wheel_circ_m":    fmt.Sprintf("%f", newCirc),
+			"max_hr":          fmt.Sprintf("%d", newMaxHR),
+			"rider_weight_kg": fmt.Sprintf("%f", newWeight),
+		}
 		if v, ok := data["workout_name"]; ok {
-			_ = s.DB.SaveSetting("workout_name", fmt.Sprint(v))
+			settingsMap["workout_name"] = fmt.Sprint(v)
+		}
+		if err := s.DB.SaveSettings(settingsMap); err != nil {
+			log.Printf("failed to persist settings to db: %v", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]any{
+				"ok":     false,
+				"errors": []string{fmt.Sprintf("failed to persist settings: %v", err)},
+			})
+			return
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -852,6 +867,10 @@ func (s *Server) handleWorkoutSubroutes(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleSensorsStatus(w http.ResponseWriter, r *http.Request) {
 	snap := s.State.GetSnapshot()
+	storageOK := false
+	if s.DB != nil && s.DB.Ping() == nil {
+		storageOK = true
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"ok":           true,
@@ -859,7 +878,7 @@ func (s *Server) handleSensorsStatus(w http.ResponseWriter, r *http.Request) {
 		"power_source": snap.PowerSource,
 		"status":       snap.Status,
 		"lan_secured":  s.LANPIN != "",
-		"storage_ok":   s.DB != nil,
+		"storage_ok":   storageOK,
 	})
 }
 

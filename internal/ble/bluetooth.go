@@ -291,46 +291,53 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 		}
 
 		hasCore := (activeHR != nil) && (activeCad != nil || activeSpd != nil)
-		expectsPower := (cachedPower != "" || cachedFTMS != "")
 		hasPower := (activePower != nil || activeFTMS != nil)
 
 		needHR := (activeHR == nil) && !connectingHR
 		needCad := (activeCad == nil) && !connectingCad
 		needSpd := (activeSpd == nil) && !connectingSpd
-		needPower := expectsPower && (activePower == nil) && !connectingPower
-		needFTMS := expectsPower && (activeFTMS == nil) && !connectingFTMS
+		needPower := !hasPower && !connectingPower
+		needFTMS := !hasPower && !connectingFTMS
 		anyConnecting := connectingHR || connectingCad || connectingSpd || connectingPower || connectingFTMS
 
-		if hasCore && (!expectsPower || hasPower) && !anyConnecting {
-			var status string
-			if hasPower {
-				status = "All sensors live (Direct Power)"
-			} else {
-				status = "All sensors live (Virtual Power)"
-			}
+		// If all possible sensor categories are connected and none connecting, sleep and loop
+		if activeHR != nil && activeCad != nil && activeSpd != nil && hasPower && !anyConnecting {
+			status := "All sensors live (Direct Power)"
 			state.UpdateTelemetry(session.Telemetry{Status: &status})
-			time.Sleep(2 * time.Second)
+			time.Sleep(3 * time.Second)
 			continue
 		}
 
-		var missing []string
-		if needHR {
-			missing = append(missing, "Garmin HR")
-		}
-		if activeCad == nil && activeSpd == nil && !connectingCad && !connectingSpd {
-			missing = append(missing, "Cadence/Speed (Magene)")
-		}
-		if expectsPower && !hasPower {
-			if cachedPower != "" && needPower {
-				missing = append(missing, "Power meter")
+		// When core sensors are connected, show core-ready status while continuing background discovery
+		if hasCore && !anyConnecting {
+			var status string
+			if hasPower {
+				if activeCad != nil && activeSpd != nil {
+					status = "All sensors live (Direct Power)"
+				} else {
+					status = "Sensors live (Direct Power)"
+				}
+			} else {
+				if activeCad != nil && activeSpd != nil {
+					status = "All sensors live (Virtual Power)"
+				} else {
+					status = "Sensors live (Virtual Power)"
+				}
 			}
-			if cachedFTMS != "" && needFTMS {
-				missing = append(missing, "FTMS trainer")
-			}
-		}
-		if len(missing) > 0 {
-			status := fmt.Sprintf("Searching: %s… (spin pedals/wheel)", strings.Join(missing, ", "))
 			state.UpdateTelemetry(session.Telemetry{Status: &status})
+			time.Sleep(4 * time.Second)
+		} else if !hasCore {
+			var missing []string
+			if needHR {
+				missing = append(missing, "Garmin HR")
+			}
+			if activeCad == nil && activeSpd == nil && !connectingCad && !connectingSpd {
+				missing = append(missing, "Cadence/Speed (Magene)")
+			}
+			if len(missing) > 0 {
+				status := fmt.Sprintf("Searching: %s… (spin pedals/wheel)", strings.Join(missing, ", "))
+				state.UpdateTelemetry(session.Telemetry{Status: &status})
+			}
 		}
 
 		// Perform a short BLE scan to find missing sensors
@@ -481,6 +488,19 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 		assigned := make(map[string]bool)
 		for _, dev := range foundCSC {
 			addr := dev.result.Address.String()
+			m.mu.Lock()
+			activeAddrs := make(map[string]bool)
+			if m.activeCad != nil {
+				activeAddrs[m.activeCad.Address.String()] = true
+			}
+			if m.activeSpd != nil {
+				activeAddrs[m.activeSpd.Address.String()] = true
+			}
+			m.mu.Unlock()
+			if activeAddrs[addr] {
+				continue
+			}
+
 			if needSpd && dev.isSpd && !dev.isCad {
 				needSpd = false
 				assigned[addr] = true

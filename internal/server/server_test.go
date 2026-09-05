@@ -612,4 +612,118 @@ func TestWorkoutImportValidationAndLimits(t *testing.T) {
 	}
 }
 
+func TestResetWithNilDBPreservesUnsavedRide(t *testing.T) {
+	st := session.NewState(session.DefaultPlaylistID)
+	// Server with nil DB
+	srv := New(st, "<html>HUD</html>", "<html>Launcher</html>", nil, nil, "")
+
+	// Seed ride with elapsed > 5s
+	hr := 140
+	st.UpdateTelemetry(session.Telemetry{HR: &hr})
+	st.SetStartedAtForTest(time.Now().Add(-2 * time.Minute))
+
+	// Normal reset without force must fail and preserve the ride
+	req := httptest.NewRequest(http.MethodPost, "/api/workout/reset", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected HTTP 500 when resetting unsaved ride with nil DB, got %d", rec.Code)
+	}
+	var res map[string]any
+	json.NewDecoder(rec.Body).Decode(&res)
+	if res["ok"] == true || res["saved"] == true {
+		t.Fatalf("expected ok:false and saved:false, got %v", res)
+	}
+
+	snap := st.GetSnapshot()
+	if snap.ElapsedSec < 60 {
+		t.Fatalf("expected ride to be preserved, elapsed: %d", snap.ElapsedSec)
+	}
+
+	// Forced reset must succeed
+	reqForce := httptest.NewRequest(http.MethodPost, "/api/workout/reset?force=true", nil)
+	recForce := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(recForce, reqForce)
+
+	if recForce.Code != http.StatusOK {
+		t.Fatalf("expected HTTP 200 on forced reset with nil DB, got %d", recForce.Code)
+	}
+	snapAfter := st.GetSnapshot()
+	if snapAfter.ElapsedSec > 1 {
+		t.Fatalf("expected ride to be cleared after force reset, elapsed: %d", snapAfter.ElapsedSec)
+	}
+}
+
+func TestSensorsStatusStorageHealth(t *testing.T) {
+	st := session.NewState(session.DefaultPlaylistID)
+
+	// 1. Nil DB -> storage_ok must be false
+	srvNil := New(st, "<html>HUD</html>", "<html>Launcher</html>", nil, nil, "")
+	recNil := httptest.NewRecorder()
+	srvNil.Handler().ServeHTTP(recNil, httptest.NewRequest(http.MethodGet, "/api/sensors/status", nil))
+	var resNil map[string]any
+	json.NewDecoder(recNil.Body).Decode(&resNil)
+	if resNil["storage_ok"] != false {
+		t.Fatalf("expected storage_ok: false when DB is nil, got: %v", resNil["storage_ok"])
+	}
+
+	// 2. Open DB -> storage_ok must be true
+	tmpDir := t.TempDir()
+	database, err := db.Open(filepath.Join(tmpDir, "status_test.db"))
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+	srvDB := New(st, "<html>HUD</html>", "<html>Launcher</html>", nil, database, "")
+	recDB := httptest.NewRecorder()
+	srvDB.Handler().ServeHTTP(recDB, httptest.NewRequest(http.MethodGet, "/api/sensors/status", nil))
+	var resDB map[string]any
+	json.NewDecoder(recDB.Body).Decode(&resDB)
+	if resDB["storage_ok"] != true {
+		t.Fatalf("expected storage_ok: true when DB is open, got: %v", resDB["storage_ok"])
+	}
+
+	// 3. Closed DB -> storage_ok must be false
+	database.Close()
+	recClosed := httptest.NewRecorder()
+	srvDB.Handler().ServeHTTP(recClosed, httptest.NewRequest(http.MethodGet, "/api/sensors/status", nil))
+	var resClosed map[string]any
+	json.NewDecoder(recClosed.Body).Decode(&resClosed)
+	if resClosed["storage_ok"] != false {
+		t.Fatalf("expected storage_ok: false when DB ping fails, got: %v", resClosed["storage_ok"])
+	}
+}
+
+func TestSettingsWriteFailureReportsError(t *testing.T) {
+	st := session.NewState(session.DefaultPlaylistID)
+	tmpDir := t.TempDir()
+	database, err := db.Open(filepath.Join(tmpDir, "settings_fail_test.db"))
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+	srv := New(st, "<html>HUD</html>", "<html>Launcher</html>", nil, database, "")
+
+	// Force database failure by closing connection
+	database.Close()
+
+	payload := `{"playlist_id":"PLTESTFAIL","wheel_circ_m":2.1,"max_hr":190,"rider_weight_kg":72.0}`
+	req := httptest.NewRequest(http.MethodPost, "/api/settings", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected HTTP 500 when saving settings to broken db, got %d", rec.Code)
+	}
+	var res map[string]any
+	json.NewDecoder(rec.Body).Decode(&res)
+	if res["ok"] == true {
+		t.Fatalf("expected ok:false, got %v", res)
+	}
+	errs, _ := res["errors"].([]any)
+	if len(errs) == 0 {
+		t.Fatalf("expected non-empty errors array, got: %v", res)
+	}
+}
+
 

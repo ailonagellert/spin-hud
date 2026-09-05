@@ -151,6 +151,16 @@ func (d *DB) Close() error {
 	return nil
 }
 
+// Ping verifies the database connection is alive and responsive.
+func (d *DB) Ping() error {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if d.db == nil {
+		return errors.New("database closed")
+	}
+	return d.db.Ping()
+}
+
 // SaveRide saves a completed workout ride session and its 1Hz trackpoints.
 func (d *DB) SaveRide(snap session.Snapshot, startWall, endWall time.Time, points []session.Trackpoint, workoutName string) (int64, error) {
 	d.mu.Lock()
@@ -158,13 +168,7 @@ func (d *DB) SaveRide(snap session.Snapshot, startWall, endWall time.Time, point
 	return d.saveRideLocked(snap, startWall, endWall, points, workoutName)
 }
 
-func (d *DB) saveRideLocked(snap session.Snapshot, startWall, endWall time.Time, points []session.Trackpoint, workoutName string) (int64, error) {
-	tx, err := d.db.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-
+func saveRideTx(tx *sql.Tx, snap session.Snapshot, startWall, endWall time.Time, points []session.Trackpoint, workoutName, notes string) (int64, error) {
 	distM := snap.DistanceKm * 1000.0
 
 	res, err := tx.Exec(`
@@ -188,7 +192,7 @@ func (d *DB) saveRideLocked(snap session.Snapshot, startWall, endWall time.Time,
 		snap.AvgWatts,
 		snap.MaxWatts,
 		workoutName,
-		"",
+		notes,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert ride: %w", err)
@@ -236,6 +240,21 @@ func (d *DB) saveRideLocked(snap session.Snapshot, startWall, endWall time.Time,
 				return 0, fmt.Errorf("failed to insert trackpoint: %w", err)
 			}
 		}
+	}
+
+	return rideID, nil
+}
+
+func (d *DB) saveRideLocked(snap session.Snapshot, startWall, endWall time.Time, points []session.Trackpoint, workoutName string) (int64, error) {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	rideID, err := saveRideTx(tx, snap, startWall, endWall, points, workoutName, "")
+	if err != nil {
+		return 0, err
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -507,6 +526,35 @@ func (d *DB) SaveSetting(key, val string) error {
 	return err
 }
 
+// SaveSettings stores multiple key-value settings in a single transaction.
+func (d *DB) SaveSettings(settings map[string]string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.db == nil {
+		return errors.New("database closed")
+	}
+
+	tx, err := d.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for k, v := range settings {
+		if _, err := stmt.Exec(k, v); err != nil {
+			return fmt.Errorf("failed to save setting %s: %w", k, err)
+		}
+	}
+
+	return tx.Commit()
+}
+
 // GetSetting retrieves a setting value by key.
 func (d *DB) GetSetting(key string) (string, error) {
 	d.mu.RLock()
@@ -586,10 +634,13 @@ func (d *DB) ClearActiveSession() error {
 }
 
 // RecoverActiveSession checks if an unfinished workout checkpoint exists from a crash.
-// If valid (>5s elapsed), it archives it into the rides table as a recovered session and clears the checkpoint.
+// If valid (>5s elapsed), it archives it into the rides table as a recovered session and clears the checkpoint atomically.
 func (d *DB) RecoverActiveSession() (int64, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.db == nil {
+		return 0, errors.New("database closed")
+	}
 
 	var startedStr, endedStr, name, snapJSON, ptsJSON string
 	err := d.db.QueryRow(`SELECT started_at, ended_at, workout_name, snapshot_json, trackpoints_json FROM active_session WHERE id = 1`).
@@ -603,11 +654,12 @@ func (d *DB) RecoverActiveSession() (int64, error) {
 
 	var snap session.Snapshot
 	if err := json.Unmarshal([]byte(snapJSON), &snap); err != nil {
-		_, _ = d.db.Exec(`DELETE FROM active_session WHERE id = 1`)
-		return 0, nil
+		return 0, fmt.Errorf("failed to decode active session snapshot: %w", err)
 	}
 	var pts []session.Trackpoint
-	_ = json.Unmarshal([]byte(ptsJSON), &pts)
+	if err := json.Unmarshal([]byte(ptsJSON), &pts); err != nil {
+		return 0, fmt.Errorf("failed to decode active session trackpoints: %w", err)
+	}
 
 	startWall, _ := time.Parse(time.RFC3339, startedStr)
 	endWall, _ := time.Parse(time.RFC3339, endedStr)
@@ -615,9 +667,8 @@ func (d *DB) RecoverActiveSession() (int64, error) {
 		endWall = time.Now()
 	}
 
-	_, _ = d.db.Exec(`DELETE FROM active_session WHERE id = 1`)
-
 	if snap.ElapsedSec < 5 {
+		_, _ = d.db.Exec(`DELETE FROM active_session WHERE id = 1`)
 		return 0, nil
 	}
 
@@ -629,6 +680,25 @@ func (d *DB) RecoverActiveSession() (int64, error) {
 		recoveredName += " (Recovered)"
 	}
 
-	return d.saveRideLocked(snap, startWall, endWall, pts, recoveredName)
+	tx, err := d.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin recovery transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	rideID, err := saveRideTx(tx, snap, startWall, endWall, pts, recoveredName, "Recovered from previous session crash")
+	if err != nil {
+		return 0, fmt.Errorf("failed to insert recovered ride: %w", err)
+	}
+
+	if _, err := tx.Exec(`DELETE FROM active_session WHERE id = 1`); err != nil {
+		return 0, fmt.Errorf("failed to clear active session checkpoint: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit recovery transaction: %w", err)
+	}
+
+	return rideID, nil
 }
 
