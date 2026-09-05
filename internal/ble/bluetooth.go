@@ -146,11 +146,19 @@ type discoveredCSC struct {
 }
 
 func (m *bleManager) ConnectLoop(state *session.State) {
-	if err := adapter.Enable(); err != nil {
-		status := fmt.Sprintf("Bluetooth adapter error: %v", err)
-		state.UpdateTelemetry(session.Telemetry{Status: &status})
-		log.Printf("BLE: failed to enable adapter: %v", err)
-		return
+	backoff := 2 * time.Second
+	for {
+		if err := adapter.Enable(); err != nil {
+			status := fmt.Sprintf("Bluetooth adapter error: %v (retrying...)", err)
+			state.UpdateTelemetry(session.Telemetry{Status: &status})
+			log.Printf("BLE: failed to enable adapter: %v, retrying in %v...", err, backoff)
+			time.Sleep(backoff)
+			if backoff < 30*time.Second {
+				backoff *= 2
+			}
+			continue
+		}
+		break
 	}
 
 	// Attempt fast startup connection using cached device addresses
@@ -282,17 +290,26 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 			}
 		}
 
+		hasCore := (activeHR != nil) && (activeCad != nil || activeSpd != nil)
+		expectsPower := (cachedPower != "" || cachedFTMS != "")
+		hasPower := (activePower != nil || activeFTMS != nil)
+
 		needHR := (activeHR == nil) && !connectingHR
 		needCad := (activeCad == nil) && !connectingCad
 		needSpd := (activeSpd == nil) && !connectingSpd
-		needPower := (activePower == nil) && !connectingPower
-		needFTMS := (activeFTMS == nil) && !connectingFTMS
+		needPower := expectsPower && (activePower == nil) && !connectingPower
+		needFTMS := expectsPower && (activeFTMS == nil) && !connectingFTMS
 		anyConnecting := connectingHR || connectingCad || connectingSpd || connectingPower || connectingFTMS
 
-		if !needHR && !needCad && !needSpd && !needPower && !needFTMS && !anyConnecting {
-			status := "All sensors live"
+		if hasCore && (!expectsPower || hasPower) && !anyConnecting {
+			var status string
+			if hasPower {
+				status = "All sensors live (Direct Power)"
+			} else {
+				status = "All sensors live (Virtual Power)"
+			}
 			state.UpdateTelemetry(session.Telemetry{Status: &status})
-			time.Sleep(1500 * time.Millisecond)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -300,17 +317,16 @@ func (m *bleManager) ConnectLoop(state *session.State) {
 		if needHR {
 			missing = append(missing, "Garmin HR")
 		}
-		if needCad {
-			missing = append(missing, "Cadence (57177)")
+		if activeCad == nil && activeSpd == nil && !connectingCad && !connectingSpd {
+			missing = append(missing, "Cadence/Speed (Magene)")
 		}
-		if needSpd {
-			missing = append(missing, "Speed (40452)")
-		}
-		if needPower {
-			missing = append(missing, "Power meter")
-		}
-		if needFTMS {
-			missing = append(missing, "FTMS trainer")
+		if expectsPower && !hasPower {
+			if cachedPower != "" && needPower {
+				missing = append(missing, "Power meter")
+			}
+			if cachedFTMS != "" && needFTMS {
+				missing = append(missing, "FTMS trainer")
+			}
 		}
 		if len(missing) > 0 {
 			status := fmt.Sprintf("Searching: %s… (spin pedals/wheel)", strings.Join(missing, ", "))

@@ -292,16 +292,324 @@ func TestLauncherModeInjection(t *testing.T) {
 
 	// 2. LAN Mode (with PIN)
 	srvLAN := New(st, "<html>HUD</html>", launcherHTML, nil, database, "482910")
-	recLAN := httptest.NewRecorder()
-	srvLAN.Handler().ServeHTTP(recLAN, httptest.NewRequest(http.MethodGet, "/launcher", nil))
-	if recLAN.Code != http.StatusOK {
-		t.Fatalf("GET /launcher LAN status = %d", recLAN.Code)
+
+	// 2a. Remote unauthenticated visitor: must NOT disclose PIN
+	recRemote := httptest.NewRecorder()
+	reqRemote := httptest.NewRequest(http.MethodGet, "/launcher", nil)
+	reqRemote.RemoteAddr = "192.168.1.50:54321"
+	srvLAN.Handler().ServeHTTP(recRemote, reqRemote)
+	if recRemote.Code != http.StatusOK {
+		t.Fatalf("GET /launcher remote status = %d", recRemote.Code)
 	}
-	bodyLAN := recLAN.Body.String()
-	if !strings.Contains(bodyLAN, `data-lan="true"`) {
-		t.Errorf("expected data-lan=true in LAN mode, got: %s", bodyLAN)
+	bodyRemote := recRemote.Body.String()
+	if !strings.Contains(bodyRemote, `data-lan="true"`) {
+		t.Errorf("expected data-lan=true in LAN mode, got: %s", bodyRemote)
 	}
-	if !strings.Contains(bodyLAN, `data-pin="482910"`) {
-		t.Errorf("expected pin 482910 in LAN mode, got: %s", bodyLAN)
+	if !strings.Contains(bodyRemote, `data-pin=""`) {
+		t.Errorf("expected data-pin to be withheld from remote unauthenticated visitor, got: %s", bodyRemote)
+	}
+
+	// 2b. Local console (127.0.0.1): displays PIN so rider can pair device
+	recLocal := httptest.NewRecorder()
+	reqLocal := httptest.NewRequest(http.MethodGet, "/launcher", nil)
+	reqLocal.RemoteAddr = "127.0.0.1:54321"
+	srvLAN.Handler().ServeHTTP(recLocal, reqLocal)
+	if recLocal.Code != http.StatusOK {
+		t.Fatalf("GET /launcher local status = %d", recLocal.Code)
+	}
+	bodyLocal := recLocal.Body.String()
+	if !strings.Contains(bodyLocal, `data-pin="482910"`) {
+		t.Errorf("expected pin 482910 for local console, got: %s", bodyLocal)
+	}
+
+	// 2c. Remote authenticated visitor: displays PIN
+	recAuth := httptest.NewRecorder()
+	reqAuth := httptest.NewRequest(http.MethodGet, "/launcher", nil)
+	reqAuth.RemoteAddr = "192.168.1.50:54321"
+	reqAuth.Header.Set("X-PIN", "482910")
+	srvLAN.Handler().ServeHTTP(recAuth, reqAuth)
+	if recAuth.Code != http.StatusOK {
+		t.Fatalf("GET /launcher auth status = %d", recAuth.Code)
+	}
+	bodyAuth := recAuth.Body.String()
+	if !strings.Contains(bodyAuth, `data-pin="482910"`) {
+		t.Errorf("expected pin 482910 for authenticated session, got: %s", bodyAuth)
 	}
 }
+
+func TestServerWorkoutFinishRetryAndSafeReset(t *testing.T) {
+	srv, database, st := setupTestServer(t, "")
+	defer database.Close()
+	handler := srv.Handler()
+
+	// Seed ride telemetry
+	hr := 160
+	spd := 22.0
+	st.UpdateTelemetry(session.Telemetry{HR: &hr, SpeedMPH: &spd})
+	st.AddDistanceDelta(4.0)
+	st.SetWorkoutName("Retry & Safe Reset Test")
+	st.SetStartedAtForTest(time.Now().Add(-10 * time.Minute))
+
+	// 1. Double finish returns same ride ID without duplicate
+	req := httptest.NewRequest(http.MethodPost, "/api/workout/finish", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/workout/finish failed: %d", rec.Code)
+	}
+	var res1 map[string]any
+	json.NewDecoder(rec.Body).Decode(&res1)
+	rideID1 := int64(res1["ride_id"].(float64))
+	if rideID1 <= 0 || res1["saved"] != true {
+		t.Fatalf("expected saved ride, got: %v", res1)
+	}
+
+	// Second finish
+	req2 := httptest.NewRequest(http.MethodPost, "/api/workout/finish", nil)
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	var res2 map[string]any
+	json.NewDecoder(rec2.Body).Decode(&res2)
+	rideID2 := int64(res2["ride_id"].(float64))
+	if rideID2 != rideID1 {
+		t.Fatalf("expected second finish to return existing ride ID %d, got %d", rideID1, rideID2)
+	}
+
+	// Verify only 1 ride in history
+	rides, err := database.ListRides(10, 0)
+	if err != nil || len(rides) != 1 {
+		t.Fatalf("expected 1 ride in history, got %d (err: %v)", len(rides), err)
+	}
+}
+
+func TestActiveSessionCrashRecovery(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "recovery_test.db")
+	database, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+	defer database.Close()
+
+	now := time.Now()
+	snap := session.Snapshot{
+		ElapsedSec: 600,
+		DistanceKm: 5.0,
+		Calories:   250,
+		IsRunning:  true,
+	}
+	pts := []session.Trackpoint{
+		{Time: now.Add(-10 * time.Minute), Cadence: 85, Watts: 180},
+		{Time: now.Add(-5 * time.Minute), Cadence: 90, Watts: 200},
+	}
+
+	// Checkpoint in-progress active workout
+	if err := database.CheckpointActiveSession(snap, now.Add(-10*time.Minute), now, pts, "Morning Spin"); err != nil {
+		t.Fatalf("CheckpointActiveSession failed: %v", err)
+	}
+
+	// Simulate restart / crash recovery
+	recoveredID, err := database.RecoverActiveSession()
+	if err != nil || recoveredID <= 0 {
+		t.Fatalf("RecoverActiveSession failed: id=%d, err=%v", recoveredID, err)
+	}
+
+	// Verify it was archived with "(Recovered)" in history
+	detail, err := database.GetRide(recoveredID)
+	if err != nil || detail == nil {
+		t.Fatalf("failed to get recovered ride detail: %v", err)
+	}
+	if !strings.Contains(detail.WorkoutName, "Recovered") {
+		t.Errorf("expected Recovered in workout name, got: %s", detail.WorkoutName)
+	}
+	if len(detail.Trackpoints) != 2 {
+		t.Errorf("expected 2 trackpoints, got %d", len(detail.Trackpoints))
+	}
+
+	// Subsequent recovery should find nothing
+	rec2, err := database.RecoverActiveSession()
+	if err != nil || rec2 != 0 {
+		t.Fatalf("expected no further recoverable session, got %d", rec2)
+	}
+}
+
+func TestSettingsPersistence(t *testing.T) {
+	srv, database, st := setupTestServer(t, "")
+	defer database.Close()
+	handler := srv.Handler()
+
+	body := `{"playlist_id":"PLTEST123","wheel_circ_mm":2105,"max_hr":185,"rider_weight_kg":78.5,"workout_name":"FTP Test"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/settings", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/settings failed: %d", rec.Code)
+	}
+
+	// Verify State in memory
+	settings := st.GetSettings()
+	if settings.PlaylistID != "PLTEST123" || settings.MaxHR != 185 || settings.RiderWeightKg != 78.5 || settings.WorkoutName != "FTP Test" {
+		t.Fatalf("unexpected settings in state: %+v", settings)
+	}
+
+	// Verify SQLite database
+	dbSettings, err := database.LoadSettings()
+	if err != nil {
+		t.Fatalf("LoadSettings failed: %v", err)
+	}
+	if dbSettings["playlist_id"] != "PLTEST123" || dbSettings["max_hr"] != "185" || dbSettings["workout_name"] != "FTP Test" {
+		t.Fatalf("unexpected persisted settings: %+v", dbSettings)
+	}
+}
+
+func TestServerWorkoutFinishSaveFailureAndRetry(t *testing.T) {
+	st := session.NewState(session.DefaultPlaylistID)
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "fail_test.db")
+	database, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+
+	srv := New(st, "<html>HUD</html>", "<html>Launcher</html>", nil, database, "")
+
+	// Seed ride telemetry and set startedAt >5s ago
+	hr := 160
+	spd := 22.0
+	st.UpdateTelemetry(session.Telemetry{HR: &hr, SpeedMPH: &spd})
+	st.AddDistanceDelta(4.0)
+	st.SetStartedAtForTest(time.Now().Add(-10 * time.Minute))
+	st.SetWorkoutName("Failure & Recovery Ride")
+
+	// 1. Force database write failure by closing database
+	database.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/workout/finish", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected HTTP 500 on database failure, got %d", rec.Code)
+	}
+	var failResp map[string]any
+	json.NewDecoder(rec.Body).Decode(&failResp)
+	if failResp["ok"] == true || failResp["saved"] == true {
+		t.Fatalf("expected ok:false and saved:false on write error, got: %v", failResp)
+	}
+	if failResp["error"] == "" {
+		t.Fatalf("expected error message in response, got empty")
+	}
+
+	// 2. Restore storage
+	restoredDB, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed to reopen db: %v", err)
+	}
+	defer restoredDB.Close()
+	srv.DB = restoredDB
+
+	// 3. Retry POST /api/workout/finish
+	reqRetry := httptest.NewRequest(http.MethodPost, "/api/workout/finish", nil)
+	recRetry := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(recRetry, reqRetry)
+
+	if recRetry.Code != http.StatusOK {
+		t.Fatalf("expected HTTP 200 on retry after storage restored, got %d", recRetry.Code)
+	}
+	var retryResp map[string]any
+	json.NewDecoder(recRetry.Body).Decode(&retryResp)
+	rideID := int64(retryResp["ride_id"].(float64))
+	if rideID <= 0 || retryResp["saved"] != true {
+		t.Fatalf("expected ride to be successfully saved on retry, got: %v", retryResp)
+	}
+
+	// Verify exactly 1 ride in history
+	rides, err := restoredDB.ListRides(10, 0)
+	if err != nil || len(rides) != 1 {
+		t.Fatalf("expected exactly 1 ride in history, got %d (err: %v)", len(rides), err)
+	}
+}
+
+func TestServerWorkoutResetSaveFailure(t *testing.T) {
+	st := session.NewState(session.DefaultPlaylistID)
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "reset_fail_test.db")
+	database, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+
+	srv := New(st, "<html>HUD</html>", "<html>Launcher</html>", nil, database, "")
+
+	// Seed ride
+	hr := 150
+	st.UpdateTelemetry(session.Telemetry{HR: &hr})
+	st.AddDistanceDelta(2.5)
+	st.SetStartedAtForTest(time.Now().Add(-5 * time.Minute))
+	st.SetWorkoutName("Unsaved Reset Ride")
+
+	// Close database to force failure
+	database.Close()
+
+	// Normal reset without force must fail and NOT wipe the ride
+	req := httptest.NewRequest(http.MethodPost, "/api/workout/reset", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected HTTP 500 when auto-save fails on reset, got %d", rec.Code)
+	}
+
+	// Verify workout is preserved in State
+	snap := st.GetSnapshot()
+	if snap.ElapsedSec < 100 {
+		t.Fatalf("expected workout to remain active and preserved, got elapsed: %d", snap.ElapsedSec)
+	}
+
+	// Reset with force=true succeeds even if DB fails
+	reqForce := httptest.NewRequest(http.MethodPost, "/api/workout/reset?force=true", nil)
+	recForce := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(recForce, reqForce)
+
+	if recForce.Code != http.StatusOK {
+		t.Fatalf("expected HTTP 200 on forced reset, got %d", recForce.Code)
+	}
+	snapAfter := st.GetSnapshot()
+	if snapAfter.ElapsedSec > 1 {
+		t.Fatalf("expected workout to be reset, got elapsed: %d", snapAfter.ElapsedSec)
+	}
+}
+
+func TestWorkoutImportValidationAndLimits(t *testing.T) {
+	srv, database, _ := setupTestServer(t, "")
+	defer database.Close()
+	handler := srv.Handler()
+
+	// 1. Malformed JSON
+	reqBad := httptest.NewRequest(http.MethodPost, "/api/workouts/import", strings.NewReader(`{bad json`))
+	reqBad.Header.Set("Content-Type", "application/json")
+	recBad := httptest.NewRecorder()
+	handler.ServeHTTP(recBad, reqBad)
+	if recBad.Code != http.StatusBadRequest {
+		t.Fatalf("expected HTTP 400 on malformed workout, got %d", recBad.Code)
+	}
+
+	// 2. Database failure on save
+	database.Close()
+	validWorkout := `{"name":"Intervals 4x4","intervals":[{"duration_sec":240,"target_watts":250}]}`
+	reqSaveFail := httptest.NewRequest(http.MethodPost, "/api/workouts/import", strings.NewReader(validWorkout))
+	reqSaveFail.Header.Set("Content-Type", "application/json")
+	recSaveFail := httptest.NewRecorder()
+	handler.ServeHTTP(recSaveFail, reqSaveFail)
+	if recSaveFail.Code != http.StatusInternalServerError {
+		t.Fatalf("expected HTTP 500 when database save fails on import, got %d", recSaveFail.Code)
+	}
+	var res map[string]any
+	json.NewDecoder(recSaveFail.Body).Decode(&res)
+	if res["ok"] == true {
+		t.Fatalf("expected ok:false when save fails, got: %v", res)
+	}
+}
+
+

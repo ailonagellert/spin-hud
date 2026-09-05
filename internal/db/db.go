@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -116,6 +117,21 @@ func Open(path string) (*DB, error) {
 		content_json TEXT NOT NULL,
 		created_at TEXT NOT NULL
 	);
+
+	CREATE TABLE IF NOT EXISTS settings (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS active_session (
+		id INTEGER PRIMARY KEY CHECK (id = 1),
+		updated_at TEXT NOT NULL,
+		started_at TEXT NOT NULL,
+		ended_at TEXT NOT NULL,
+		workout_name TEXT NOT NULL,
+		snapshot_json TEXT NOT NULL,
+		trackpoints_json TEXT NOT NULL
+	);
 	`
 
 	if _, err := db.Exec(schema); err != nil {
@@ -139,7 +155,10 @@ func (d *DB) Close() error {
 func (d *DB) SaveRide(snap session.Snapshot, startWall, endWall time.Time, points []session.Trackpoint, workoutName string) (int64, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	return d.saveRideLocked(snap, startWall, endWall, points, workoutName)
+}
 
+func (d *DB) saveRideLocked(snap session.Snapshot, startWall, endWall time.Time, points []session.Trackpoint, workoutName string) (int64, error) {
 	tx, err := d.db.Begin()
 	if err != nil {
 		return 0, err
@@ -479,3 +498,137 @@ func (d *DB) GetWorkout(id string) (*workout.Workout, error) {
 	}
 	return &w, nil
 }
+
+// SaveSetting stores a key-value setting.
+func (d *DB) SaveSetting(key, val string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	_, err := d.db.Exec(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, val)
+	return err
+}
+
+// GetSetting retrieves a setting value by key.
+func (d *DB) GetSetting(key string) (string, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	var val string
+	err := d.db.QueryRow(`SELECT value FROM settings WHERE key = ?`, key).Scan(&val)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return val, nil
+}
+
+// LoadSettings returns all stored settings.
+func (d *DB) LoadSettings() (map[string]string, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	rows, err := d.db.Query(`SELECT key, value FROM settings`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[string]string)
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
+		}
+		m[k] = v
+	}
+	return m, nil
+}
+
+// CheckpointActiveSession updates the recoverable in-progress workout checkpoint.
+func (d *DB) CheckpointActiveSession(snap session.Snapshot, startWall, endWall time.Time, points []session.Trackpoint, workoutName string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	snapJSON, err := json.Marshal(snap)
+	if err != nil {
+		return err
+	}
+	ptsJSON, err := json.Marshal(points)
+	if err != nil {
+		return err
+	}
+
+	_, err = d.db.Exec(`
+		INSERT INTO active_session (id, updated_at, started_at, ended_at, workout_name, snapshot_json, trackpoints_json)
+		VALUES (1, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			updated_at = excluded.updated_at,
+			started_at = excluded.started_at,
+			ended_at = excluded.ended_at,
+			workout_name = excluded.workout_name,
+			snapshot_json = excluded.snapshot_json,
+			trackpoints_json = excluded.trackpoints_json
+	`,
+		time.Now().Format(time.RFC3339),
+		startWall.Format(time.RFC3339),
+		endWall.Format(time.RFC3339),
+		workoutName,
+		string(snapJSON),
+		string(ptsJSON),
+	)
+	return err
+}
+
+// ClearActiveSession removes any active workout checkpoint.
+func (d *DB) ClearActiveSession() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	_, err := d.db.Exec(`DELETE FROM active_session WHERE id = 1`)
+	return err
+}
+
+// RecoverActiveSession checks if an unfinished workout checkpoint exists from a crash.
+// If valid (>5s elapsed), it archives it into the rides table as a recovered session and clears the checkpoint.
+func (d *DB) RecoverActiveSession() (int64, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	var startedStr, endedStr, name, snapJSON, ptsJSON string
+	err := d.db.QueryRow(`SELECT started_at, ended_at, workout_name, snapshot_json, trackpoints_json FROM active_session WHERE id = 1`).
+		Scan(&startedStr, &endedStr, &name, &snapJSON, &ptsJSON)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	var snap session.Snapshot
+	if err := json.Unmarshal([]byte(snapJSON), &snap); err != nil {
+		_, _ = d.db.Exec(`DELETE FROM active_session WHERE id = 1`)
+		return 0, nil
+	}
+	var pts []session.Trackpoint
+	_ = json.Unmarshal([]byte(ptsJSON), &pts)
+
+	startWall, _ := time.Parse(time.RFC3339, startedStr)
+	endWall, _ := time.Parse(time.RFC3339, endedStr)
+	if endWall.IsZero() {
+		endWall = time.Now()
+	}
+
+	_, _ = d.db.Exec(`DELETE FROM active_session WHERE id = 1`)
+
+	if snap.ElapsedSec < 5 {
+		return 0, nil
+	}
+
+	recoveredName := name
+	if recoveredName == "" {
+		recoveredName = "Spin Ride"
+	}
+	if !strings.Contains(recoveredName, "Recovered") {
+		recoveredName += " (Recovered)"
+	}
+
+	return d.saveRideLocked(snap, startWall, endWall, pts, recoveredName)
+}
+

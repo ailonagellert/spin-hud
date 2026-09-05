@@ -162,6 +162,20 @@ def test_virtual_power_and_tcx_export() -> None:
     assert '<Cadence>' in tcx
 
 
+def test_go_test_suite() -> None:
+    """Validate Go native backend build, vet, and unit/integration tests."""
+    import shutil
+    import subprocess
+    if shutil.which("go"):
+        print("Running Go test suite (go test ./...)...")
+        subprocess.run(["go", "test", "-count=1", "./..."], check=True)
+        print("Running Go vet (go vet ./...)...")
+        subprocess.run(["go", "vet", "./..."], check=True)
+        print("Running Go build check...")
+        devnull = "NUL" if sys.platform == "win32" else "/dev/null"
+        subprocess.run(["go", "build", "-o", devnull, "."], check=True)
+
+
 def main() -> int:
     test_core_parsers()
     test_csc_counter_reboot_and_discontinuity()
@@ -170,11 +184,13 @@ def main() -> int:
     test_hr_zone_and_settings_bounds()
     test_html_dynamic_playlist_injection()
     test_virtual_power_and_tcx_export()
-    print("All spin-hud regression test suites passed successfully!")
+    test_go_test_suite()
+    print("All spin-hud regression test suites (Python & Go) passed successfully!")
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
 
 

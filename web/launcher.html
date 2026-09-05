@@ -835,8 +835,12 @@
         cardLan.classList.remove('inactive');
         tagLan.style.display = 'inline-block';
 
-        pinPill.style.display = 'inline-flex';
-        pinValue.textContent = LAN_PIN || '--';
+        if (LAN_PIN && LAN_PIN.length > 0) {
+          pinPill.style.display = 'inline-flex';
+          pinValue.textContent = LAN_PIN;
+        } else {
+          pinPill.style.display = 'none';
+        }
       } else {
         cardLocal.classList.add('active');
         cardLocal.classList.remove('inactive');

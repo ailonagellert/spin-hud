@@ -1931,6 +1931,7 @@
         </div>
       </div>
       <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
+        <button id="btn-retry-save" class="btn-primary" style="display:none; background: linear-gradient(135deg, #eab308, #ca8a04); color:#fff;">🔄 Retry Save to Database</button>
         <button id="btn-strava-upload" class="btn-primary" style="background: linear-gradient(135deg, #fc4c02, #e34402); color:#fff;">Post to Strava</button>
         <div id="strava-upload-status" style="font-size:13px;opacity:.85;min-height:1.2em;"></div>
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
@@ -2797,18 +2798,24 @@
       setWorkoutRunning(false);
 
       fetch('/api/workout/finish', { method: 'POST' })
-        .then(r => r.json())
+        .then(async r => {
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok || (data && data.ok === false)) {
+            throw new Error(data && data.error ? data.error : `HTTP ${r.status}`);
+          }
+          return data;
+        })
         .then(res => {
           if (res && res.saved) {
             showToast(`🏆 Workout Saved to History (ID #${res.ride_id || 'saved'})!`, 'success');
           } else {
-            showToast('🏆 Workout Completed!', 'success');
+            showToast('🏆 Workout Finished (unsaved session)', 'info');
           }
           showSummary(res);
         })
-        .catch(() => {
-          showToast('🏆 Workout Completed!', 'success');
-          showSummary();
+        .catch(err => {
+          showToast(`⚠️ Workout finish error: ${err.message || 'Persistence failed'}`, 'error');
+          showSummary({ ok: false, saved: false, error: err.message || 'Persistence failed' });
         });
     }
 
@@ -2846,15 +2853,56 @@
 
       const banner = document.getElementById('summary-saved-banner');
       const sub = document.getElementById('summary-saved-subtitle');
+      const title = banner ? banner.querySelector('.saved-banner-title') : null;
+      const btnRetry = document.getElementById('btn-retry-save');
+
       if (banner) {
         if (saveInfo && saveInfo.saved) {
           banner.style.display = 'flex';
+          banner.style.background = 'rgba(16, 185, 129, 0.12)';
+          banner.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+          if (title) title.textContent = '🎉 Workout Completed & Saved!';
           if (sub) sub.textContent = saveInfo.ride_id ? `Saved to Ride History (SQLite ID #${saveInfo.ride_id}) with 1Hz telemetry.` : `Saved to local SQLite database (spin_hud.db).`;
-        } else if (elapsed >= 5) {
+          if (btnRetry) btnRetry.style.display = 'none';
+        } else if (saveInfo && saveInfo.error) {
           banner.style.display = 'flex';
-          if (sub) sub.textContent = `Saved to local SQLite database (spin_hud.db) with 1Hz telemetry.`;
+          banner.style.background = 'rgba(239, 68, 68, 0.15)';
+          banner.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+          if (title) title.textContent = '⚠️ Workout Finished but NOT Saved!';
+          if (sub) sub.textContent = `Storage error: ${saveInfo.error}. You can retry saving or export FIT/TCX below.`;
+          if (btnRetry) {
+            btnRetry.style.display = 'block';
+            btnRetry.onclick = () => {
+              btnRetry.disabled = true;
+              btnRetry.textContent = 'Retrying Save...';
+              fetch('/api/workout/finish', { method: 'POST' })
+                .then(async r => {
+                  const data = await r.json().catch(() => ({}));
+                  if (!r.ok || (data && data.ok === false)) {
+                    throw new Error(data && data.error ? data.error : `HTTP ${r.status}`);
+                  }
+                  return data;
+                })
+                .then(res => {
+                  btnRetry.disabled = false;
+                  btnRetry.textContent = '🔄 Retry Save to Database';
+                  if (res && res.saved) {
+                    showToast(`🏆 Workout Saved to History (ID #${res.ride_id || 'saved'})!`, 'success');
+                    showSummary(res);
+                  } else {
+                    showToast('Workout still unsaved', 'error');
+                  }
+                })
+                .catch(err => {
+                  btnRetry.disabled = false;
+                  btnRetry.textContent = '🔄 Retry Save to Database';
+                  showToast(`Retry failed: ${err.message || 'Error'}`, 'error');
+                });
+            };
+          }
         } else {
           banner.style.display = 'none';
+          if (btnRetry) btnRetry.style.display = 'none';
         }
       }
 
@@ -3162,7 +3210,13 @@
     document.getElementById('btn-reset-timer').onclick = () => {
       const wasActive = latestSnapshot && latestSnapshot.elapsed_sec >= 5;
       fetch('/api/workout/reset', { method: 'POST' })
-        .then(r => r.json())
+        .then(async r => {
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok || (data && data.ok === false)) {
+            throw new Error(data && data.error ? data.error : `HTTP ${r.status}`);
+          }
+          return data;
+        })
         .then(res => {
           if (res && res.saved) {
             showToast(`💾 Workout auto-saved (ID #${res.ride_id || 'saved'}) & session reset!`, 'success');
@@ -3172,8 +3226,8 @@
             showToast('↺ Session reset to 0:00', 'info');
           }
         })
-        .catch(() => {
-          showToast('↺ Session reset to 0:00', 'info');
+        .catch(err => {
+          showToast(`❌ Reset failed: ${err.message || 'Error'}`, 'error');
         });
     };
 

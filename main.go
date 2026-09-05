@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -119,13 +120,54 @@ func main() {
 
 	resolvedDBPath := *dbPath
 	if resolvedDBPath == "" {
-		resolvedDBPath = filepath.Join(base, "spin_hud.db")
+		home, err := os.UserHomeDir()
+		if err == nil && (strings.HasPrefix(base, `\\`) || strings.HasPrefix(base, `//`) || !isWritable(base)) {
+			resolvedDBPath = filepath.Join(home, ".spin_hud.db")
+		} else {
+			resolvedDBPath = filepath.Join(base, "spin_hud.db")
+		}
 	}
 	database, err := db.Open(resolvedDBPath)
 	if err != nil {
 		log.Printf("warning: sqlite persistence unavailable: %v", err)
 	} else {
 		defer database.Close()
+		// Crash recovery: restore any unfinished workout session checkpoint from an earlier crash
+		if recID, recErr := database.RecoverActiveSession(); recErr == nil && recID > 0 {
+			log.Printf("[RECOVERY] Restored unfinished ride session from previous crash (Saved as Ride #%d)", recID)
+		}
+		// Load persisted settings
+		if settings, loadErr := database.LoadSettings(); loadErr == nil && len(settings) > 0 {
+			circ := session.DefaultWheelCircM
+			if cStr, ok := settings["wheel_circ_m"]; ok {
+				var f float64
+				if _, err := fmt.Sscanf(cStr, "%f", &f); err == nil && f >= 0.5 && f <= 3.5 {
+					circ = f
+				}
+			}
+			maxHR := session.DefaultMaxHR
+			if mStr, ok := settings["max_hr"]; ok {
+				var n int
+				if _, err := fmt.Sscanf(mStr, "%d", &n); err == nil && n >= 80 && n <= 240 {
+					maxHR = n
+				}
+			}
+			weight := session.DefaultRiderWeightKg
+			if wStr, ok := settings["rider_weight_kg"]; ok {
+				var f float64
+				if _, err := fmt.Sscanf(wStr, "%f", &f); err == nil && f >= 30 && f <= 250 {
+					weight = f
+				}
+			}
+			savedPl := pl
+			if pStr, ok := settings["playlist_id"]; ok && pStr != "" {
+				savedPl = pStr
+			}
+			state.ApplySettings(savedPl, circ, maxHR, weight)
+			if woName, ok := settings["workout_name"]; ok && woName != "" {
+				state.SetWorkoutName(woName)
+			}
+		}
 	}
 
 	sc := strava.New(
@@ -163,9 +205,13 @@ func main() {
 	if *lan {
 		fmt.Printf("  LAN Pairing PIN : %s\n", lanPIN)
 	}
-	fmt.Printf("  Playlist: https://youtube.com/playlist?list=%s\n", state.PlaylistID)
+	fmt.Printf("  Playlist: https://youtube.com/playlist?list=%s\n", state.GetPlaylistID())
 	fmt.Println("  Sensors : Garmin 965 (HR) + Magene + Power / FTMS")
-	fmt.Println("  Storage : SQLite History & FIT / TCX Export Enabled")
+	if database != nil {
+		fmt.Printf("  Storage : SQLite History & FIT / TCX Export Enabled (%s)\n", resolvedDBPath)
+	} else {
+		fmt.Println("  Storage : In-memory only (SQLite persistence unavailable)")
+	}
 	fmt.Println("========================================================")
 
 	if !*noBrowser {
@@ -193,3 +239,13 @@ func isAddrInUse(err error) bool {
 	}
 	return false
 }
+
+func isWritable(dir string) bool {
+	testFile := filepath.Join(dir, fmt.Sprintf(".write_test_%d", os.Getpid()))
+	if err := os.WriteFile(testFile, []byte("ok"), 0600); err != nil {
+		return false
+	}
+	_ = os.Remove(testFile)
+	return true
+}
+

@@ -37,6 +37,8 @@ type Server struct {
 	hubMu          sync.Mutex
 	subscribers    map[chan []byte]struct{}
 	lastSavedStart time.Time
+	lastSavedID    int64
+	saveMu         sync.Mutex
 }
 
 // New builds the HTTP handler set; indexHTML is the embedded UI, launcherHTML is the start page.
@@ -51,6 +53,7 @@ func New(state *session.State, indexHTML, launcherHTML string, sc *strava.Client
 		subscribers:  make(map[chan []byte]struct{}),
 	}
 	go s.runBroadcaster()
+	go s.runCheckpointer()
 	return s
 }
 
@@ -80,6 +83,20 @@ func (s *Server) runBroadcaster() {
 			}
 		}
 		s.hubMu.Unlock()
+	}
+}
+
+func (s *Server) runCheckpointer() {
+	if s.DB == nil {
+		return
+	}
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		snap := s.State.GetSnapshot()
+		if snap.IsRunning && snap.ElapsedSec >= 5 {
+			_ = s.DB.CheckpointActiveSession(snap, s.State.WorkoutStartWall(), s.State.WorkoutEndWall(), s.State.GetTrackpoints(), snap.WorkoutName)
+		}
 	}
 }
 
@@ -158,16 +175,22 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
+func isDevMode() bool {
+	return os.Getenv("SPIN_HUD_DEV") == "1"
+}
+
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" && !strings.HasPrefix(r.URL.Path, "/index.html") {
 		http.NotFound(w, r)
 		return
 	}
 	html := s.indexHTML
-	if data, err := os.ReadFile("web/index.html"); err == nil && len(data) > 0 {
-		html = string(data)
+	if isDevMode() {
+		if data, err := os.ReadFile("web/index.html"); err == nil && len(data) > 0 {
+			html = string(data)
+		}
 	}
-	rendered := strings.ReplaceAll(html, "__PLAYLIST_ID__", s.State.PlaylistID)
+	rendered := strings.ReplaceAll(html, "__PLAYLIST_ID__", s.State.GetPlaylistID())
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(rendered))
 }
@@ -178,18 +201,23 @@ func (s *Server) handleLauncher(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	html := s.launcherHTML
-	if data, err := os.ReadFile("web/launcher.html"); err == nil && len(data) > 0 {
-		html = string(data)
+	if isDevMode() {
+		if data, err := os.ReadFile("web/launcher.html"); err == nil && len(data) > 0 {
+			html = string(data)
+		}
 	}
 	lanOn := "false"
 	pin := ""
 	if s.LANPIN != "" {
 		lanOn = "true"
-		pin = s.LANPIN
+		// P1 Security: Only disclose the pairing PIN to localhost/console or an authenticated session
+		if s.checkAuth(r) {
+			pin = s.LANPIN
+		}
 	}
 	rendered := strings.ReplaceAll(html, "__LAN__", lanOn)
 	rendered = strings.ReplaceAll(rendered, "__PIN__", pin)
-	rendered = strings.ReplaceAll(rendered, "__PLAYLIST_ID__", s.State.PlaylistID)
+	rendered = strings.ReplaceAll(rendered, "__PLAYLIST_ID__", s.State.GetPlaylistID())
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(rendered))
@@ -357,10 +385,10 @@ func (s *Server) autoSaveCurrentRide() (int64, error) {
 	start := s.State.WorkoutStartWall()
 	s.hubMu.Lock()
 	if !s.lastSavedStart.IsZero() && s.lastSavedStart.Equal(start) {
+		lastID := s.lastSavedID
 		s.hubMu.Unlock()
-		return 0, nil
+		return lastID, nil
 	}
-	s.lastSavedStart = start
 	s.hubMu.Unlock()
 
 	end := s.State.WorkoutEndWall()
@@ -369,7 +397,18 @@ func (s *Server) autoSaveCurrentRide() (int64, error) {
 	if name == "" {
 		name = "Spin Ride"
 	}
-	return s.DB.SaveRide(snap, start, end, pts, name)
+	rideID, err := s.DB.SaveRide(snap, start, end, pts, name)
+	if err != nil {
+		return 0, err
+	}
+
+	s.hubMu.Lock()
+	s.lastSavedStart = start
+	s.lastSavedID = rideID
+	s.hubMu.Unlock()
+
+	_ = s.DB.ClearActiveSession()
+	return rideID, nil
 }
 
 func (s *Server) handleFinish(w http.ResponseWriter, r *http.Request) {
@@ -377,14 +416,37 @@ func (s *Server) handleFinish(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
+
 	s.State.PauseWorkoutTimer()
 	rideID, err := s.autoSaveCurrentRide()
 	snap := s.State.GetSnapshot()
-	errMsg := ""
-	if err != nil {
-		errMsg = err.Error()
-	}
 	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]any{
+			"ok":            false,
+			"saved":         false,
+			"ride_id":       0,
+			"elapsed_sec":   snap.ElapsedSec,
+			"calories":      snap.Calories,
+			"distance_mi":   snap.DistanceMi,
+			"distance_km":   snap.DistanceKm,
+			"avg_hr":        snap.AvgHR,
+			"max_hr":        snap.MaxHR,
+			"avg_cadence":   snap.AvgCadence,
+			"max_cadence":   snap.MaxCadence,
+			"avg_speed_mph": snap.AvgSpeedMPH,
+			"max_speed_mph": snap.MaxSpeedMPH,
+			"avg_watts":     snap.AvgWatts,
+			"max_watts":     snap.MaxWatts,
+			"workout_name":  snap.WorkoutName,
+			"error":         err.Error(),
+		})
+		return
+	}
+
 	json.NewEncoder(w).Encode(map[string]any{
 		"ok":            true,
 		"saved":         rideID > 0,
@@ -402,7 +464,7 @@ func (s *Server) handleFinish(w http.ResponseWriter, r *http.Request) {
 		"avg_watts":     snap.AvgWatts,
 		"max_watts":     snap.MaxWatts,
 		"workout_name":  snap.WorkoutName,
-		"error":         errMsg,
+		"error":         "",
 	})
 }
 
@@ -411,8 +473,28 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	rideID, _ := s.autoSaveCurrentRide()
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
+
+	force := r.URL.Query().Get("force") == "true"
+	rideID, err := s.autoSaveCurrentRide()
+	if err != nil && !force {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]any{
+			"ok":      false,
+			"saved":   false,
+			"ride_id": 0,
+			"error":   fmt.Sprintf("auto-save failed before reset: %v (pass ?force=true to discard)", err),
+		})
+		return
+	}
+
 	s.State.ResetWorkout()
+	if s.DB != nil {
+		_ = s.DB.ClearActiveSession()
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"ok":      true,
@@ -466,7 +548,8 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	var errs []string
 
-	newPl := s.State.PlaylistID
+	cur := s.State.GetSettings()
+	newPl := cur.PlaylistID
 	if v, ok := data["playlist_id"]; ok {
 		pl := session.ExtractPlaylistID(fmt.Sprint(v))
 		if pl != "" {
@@ -476,7 +559,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	newCirc := s.State.WheelCirc()
+	newCirc := cur.WheelCircM
 	if v, ok := data["wheel_circ_mm"]; ok {
 		if f, ok2 := toFloat(v); ok2 && f >= 500 && f <= 3500 {
 			newCirc = f / 1000.0
@@ -485,7 +568,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	newMaxHR := s.State.MaxHR
+	newMaxHR := cur.MaxHR
 	if v, ok := data["max_hr"]; ok {
 		if n, ok2 := toInt(v); ok2 && n >= 80 && n <= 240 {
 			newMaxHR = n
@@ -494,7 +577,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	newWeight := s.State.RiderWeightKg
+	newWeight := cur.RiderWeightKg
 	if v, ok := data["rider_weight_kg"]; ok {
 		if f, ok2 := toFloat(v); ok2 && f >= 30.0 && f <= 250.0 {
 			newWeight = f
@@ -514,6 +597,15 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.State.ApplySettings(newPl, newCirc, newMaxHR, newWeight)
+	if s.DB != nil {
+		_ = s.DB.SaveSetting("playlist_id", newPl)
+		_ = s.DB.SaveSetting("wheel_circ_m", fmt.Sprintf("%f", newCirc))
+		_ = s.DB.SaveSetting("max_hr", fmt.Sprintf("%d", newMaxHR))
+		_ = s.DB.SaveSetting("rider_weight_kg", fmt.Sprintf("%f", newWeight))
+		if v, ok := data["workout_name"]; ok {
+			_ = s.DB.SaveSetting("workout_name", fmt.Sprint(v))
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprint(w, `{"ok":true}`)
 }
@@ -661,16 +753,24 @@ func (s *Server) handleWorkouts(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(all)
 }
 
+const maxWorkoutUploadSize = 10 * 1024 * 1024 // 10MB limit
+
 func (s *Server) handleWorkoutImport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxWorkoutUploadSize)
+
 	var data []byte
 	filename := "workout.json"
 
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		if err := r.ParseMultipartForm(maxWorkoutUploadSize); err != nil {
+			writeJSONError(w, fmt.Sprintf("upload too large or invalid multipart form: %v", err))
+			return
+		}
 		file, header, err := r.FormFile("file")
 		if err != nil {
 			writeJSONError(w, fmt.Sprintf("failed to read file: %v", err))
@@ -678,7 +778,7 @@ func (s *Server) handleWorkoutImport(w http.ResponseWriter, r *http.Request) {
 		}
 		defer file.Close()
 		filename = header.Filename
-		data, err = io.ReadAll(file)
+		data, err = io.ReadAll(io.LimitReader(file, maxWorkoutUploadSize))
 		if err != nil {
 			writeJSONError(w, fmt.Sprintf("failed to read file data: %v", err))
 			return
@@ -687,7 +787,7 @@ func (s *Server) handleWorkoutImport(w http.ResponseWriter, r *http.Request) {
 		var err error
 		data, err = io.ReadAll(r.Body)
 		if err != nil {
-			writeJSONError(w, err.Error())
+			writeJSONError(w, fmt.Sprintf("failed to read request body: %v", err))
 			return
 		}
 		if name := r.URL.Query().Get("filename"); name != "" {
@@ -706,7 +806,15 @@ func (s *Server) handleWorkoutImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.DB != nil {
-		_ = s.DB.SaveWorkout(wo)
+		if err := s.DB.SaveWorkout(wo); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]any{
+				"ok":    false,
+				"error": fmt.Sprintf("failed to save workout to database: %v", err),
+			})
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -751,6 +859,7 @@ func (s *Server) handleSensorsStatus(w http.ResponseWriter, r *http.Request) {
 		"power_source": snap.PowerSource,
 		"status":       snap.Status,
 		"lan_secured":  s.LANPIN != "",
+		"storage_ok":   s.DB != nil,
 	})
 }
 

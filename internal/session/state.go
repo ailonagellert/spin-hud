@@ -293,6 +293,33 @@ func (s *State) SetWorkoutName(name string) {
 	s.WorkoutName = name
 }
 
+// Settings captures user configurable preferences and calibration.
+type Settings struct {
+	PlaylistID    string  `json:"playlist_id"`
+	WheelCircM    float64 `json:"wheel_circ_m"`
+	MaxHR         int     `json:"max_hr"`
+	RiderWeightKg float64 `json:"rider_weight_kg"`
+	WorkoutName   string  `json:"workout_name"`
+}
+
+func (s *State) GetSettings() Settings {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return Settings{
+		PlaylistID:    s.PlaylistID,
+		WheelCircM:    s.WheelCircM,
+		MaxHR:         s.MaxHR,
+		RiderWeightKg: s.RiderWeightKg,
+		WorkoutName:   s.WorkoutName,
+	}
+}
+
+func (s *State) GetPlaylistID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.PlaylistID
+}
+
 func (s *State) WorkoutEndWall() time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -538,3 +565,12 @@ func ExtractPlaylistID(s string) string {
 	}
 	return s
 }
+
+// SetStartedAtForTest adjusts the workout start time for testing elapsed calculations.
+func (s *State) SetStartedAtForTest(t time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.startedAt = t
+	s.workoutStartWall = t
+}
+
