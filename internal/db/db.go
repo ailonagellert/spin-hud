@@ -161,11 +161,48 @@ func (d *DB) Ping() error {
 	return d.db.Ping()
 }
 
+// CheckWritable verifies the database connection is alive and capable of writing.
+func (d *DB) CheckWritable() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.db == nil {
+		return errors.New("database closed")
+	}
+	_, err := d.db.Exec(`INSERT INTO settings (key, value) VALUES ('_storage_probe', strftime('%s','now')) ON CONFLICT(key) DO UPDATE SET value=excluded.value`)
+	return err
+}
+
 // SaveRide saves a completed workout ride session and its 1Hz trackpoints.
 func (d *DB) SaveRide(snap session.Snapshot, startWall, endWall time.Time, points []session.Trackpoint, workoutName string) (int64, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.saveRideLocked(snap, startWall, endWall, points, workoutName)
+}
+
+// SaveRideAndClearCheckpoint atomically persists the completed ride and clears the active session checkpoint in a single transaction.
+func (d *DB) SaveRideAndClearCheckpoint(snap session.Snapshot, startWall, endWall time.Time, points []session.Trackpoint, workoutName string) (int64, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	tx, err := d.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	rideID, err := saveRideTx(tx, snap, startWall, endWall, points, workoutName, "")
+	if err != nil {
+		return 0, err
+	}
+
+	if _, err := tx.Exec(`DELETE FROM active_session WHERE id = 1`); err != nil {
+		return 0, fmt.Errorf("failed to clear active session checkpoint: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return rideID, nil
 }
 
 func saveRideTx(tx *sql.Tx, snap session.Snapshot, startWall, endWall time.Time, points []session.Trackpoint, workoutName, notes string) (int64, error) {

@@ -97,7 +97,9 @@ func (s *Server) runCheckpointer() {
 		s.saveMu.Lock()
 		snap := s.State.GetSnapshot()
 		if snap.IsRunning && snap.ElapsedSec >= 5 {
-			_ = s.DB.CheckpointActiveSession(snap, s.State.WorkoutStartWall(), s.State.WorkoutEndWall(), s.State.GetTrackpoints(), snap.WorkoutName)
+			if err := s.DB.CheckpointActiveSession(snap, s.State.WorkoutStartWall(), s.State.WorkoutEndWall(), s.State.GetTrackpoints(), snap.WorkoutName); err != nil {
+				log.Printf("[CHECKPOINT ERROR] Failed to update active session checkpoint: %v", err)
+			}
 		}
 		s.saveMu.Unlock()
 	}
@@ -400,7 +402,7 @@ func (s *Server) autoSaveCurrentRide() (int64, error) {
 	if name == "" {
 		name = "Spin Ride"
 	}
-	rideID, err := s.DB.SaveRide(snap, start, end, pts, name)
+	rideID, err := s.DB.SaveRideAndClearCheckpoint(snap, start, end, pts, name)
 	if err != nil {
 		return 0, err
 	}
@@ -410,7 +412,6 @@ func (s *Server) autoSaveCurrentRide() (int64, error) {
 	s.lastSavedID = rideID
 	s.hubMu.Unlock()
 
-	_ = s.DB.ClearActiveSession()
 	return rideID, nil
 }
 
@@ -868,7 +869,7 @@ func (s *Server) handleWorkoutSubroutes(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleSensorsStatus(w http.ResponseWriter, r *http.Request) {
 	snap := s.State.GetSnapshot()
 	storageOK := false
-	if s.DB != nil && s.DB.Ping() == nil {
+	if s.DB != nil && s.DB.CheckWritable() == nil {
 		storageOK = true
 	}
 	w.Header().Set("Content-Type", "application/json")

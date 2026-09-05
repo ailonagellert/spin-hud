@@ -259,3 +259,75 @@ func TestPing(t *testing.T) {
 		t.Fatalf("expected Ping to fail on closed db")
 	}
 }
+
+func TestCheckWritable(t *testing.T) {
+	tmpDir := t.TempDir()
+	database, err := Open(filepath.Join(tmpDir, "writable_test.db"))
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	if err := database.CheckWritable(); err != nil {
+		t.Fatalf("expected CheckWritable to succeed on healthy db, got %v", err)
+	}
+	database.Close()
+	if err := database.CheckWritable(); err == nil {
+		t.Fatalf("expected CheckWritable to fail on closed db")
+	}
+}
+
+func TestSaveRideAndClearCheckpoint(t *testing.T) {
+	tmpDir := t.TempDir()
+	database, err := Open(filepath.Join(tmpDir, "atomic_finish_test.db"))
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer database.Close()
+
+	now := time.Now()
+	start := now.Add(-15 * time.Minute)
+	hr140 := 140
+	hr165 := 165
+	snap := session.Snapshot{
+		ElapsedSec: 900,
+		DistanceKm: 7.5,
+		Calories:   220,
+		AvgHR:      &hr140,
+		MaxHR:      &hr165,
+	}
+	pts := []session.Trackpoint{
+		{Time: start, SpeedMps: 8.5, Cadence: 85},
+		{Time: now, SpeedMps: 8.8, Cadence: 90},
+	}
+
+	// 1. Setup active checkpoint
+	if err := database.CheckpointActiveSession(snap, start, now, pts, "Atomic Finish Ride"); err != nil {
+		t.Fatalf("CheckpointActiveSession failed: %v", err)
+	}
+
+	// 2. Perform atomic save and clear
+	rideID, err := database.SaveRideAndClearCheckpoint(snap, start, now, pts, "Atomic Finish Ride")
+	if err != nil {
+		t.Fatalf("SaveRideAndClearCheckpoint failed: %v", err)
+	}
+	if rideID <= 0 {
+		t.Fatalf("expected positive rideID, got %d", rideID)
+	}
+
+	// 3. Confirm checkpoint is cleared
+	recID, err := database.RecoverActiveSession()
+	if err != nil {
+		t.Fatalf("RecoverActiveSession failed: %v", err)
+	}
+	if recID != 0 {
+		t.Fatalf("expected no active session to recover, got ride ID %d", recID)
+	}
+
+	// 4. Confirm ride was persisted
+	rides, err := database.ListRides(10, 0)
+	if err != nil {
+		t.Fatalf("ListRides failed: %v", err)
+	}
+	if len(rides) != 1 || rides[0].ID != rideID {
+		t.Fatalf("expected 1 ride with id %d, got %+v", rideID, rides)
+	}
+}
