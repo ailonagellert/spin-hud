@@ -743,9 +743,40 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      font-size: 13px;
+      font-size: 13.5px;
       font-weight: 600;
-      color: var(--text-muted);
+      color: #cbd5e1;
+    }
+
+    .card-footer b {
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 14.5px;
+    }
+
+    .card-zone-row {
+      margin-top: 4px;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      min-height: 24px;
+    }
+
+    .layout-bottom-raised .telemetry-dock {
+      margin-bottom: 64px;
+    }
+
+    .layout-compact .telemetry-card {
+      padding: 8px 12px;
+      border-radius: 14px;
+    }
+
+    .layout-compact .card-value {
+      font-size: 38px;
+    }
+
+    .layout-compact .card-footer {
+      font-size: 12px;
     }
 
     .crank-icon {
@@ -861,7 +892,7 @@
     }
 
     .master-track-title {
-      font-size: 12px;
+      font-size: 13.5px;
       font-weight: 700;
       color: #ffffff;
       white-space: nowrap;
@@ -1150,7 +1181,7 @@
       outline: none;
       transition: all 0.2s;
       min-height: 32px;
-      max-width: 220px;
+      max-width: 360px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -1703,7 +1734,7 @@
           <span style="color:#f59e0b; font-size:16px;">⚡</span>
         </div>
         <div class="card-main">
-          <span id="val-watts" class="card-value">0</span>
+          <span id="val-watts" class="card-value">—</span>
           <span class="card-unit">WATTS</span>
         </div>
         <div class="card-footer">
@@ -1722,9 +1753,12 @@
           <span id="val-hr" class="card-value">—</span>
           <span class="card-unit">BPM</span>
         </div>
-        <div class="card-footer">
+        <div class="card-zone-row">
           <span id="val-hr-zone" class="zone-pill">Zone — : Ready</span>
+        </div>
+        <div class="card-footer">
           <span>Avg <b id="val-avg-hr">—</b> · Max <b id="val-max-hr">—</b></span>
+          <span id="hr-state" class="sensor-sub-state" style="font-size:11px; color:var(--text-muted);">Searching…</span>
         </div>
       </div>
 
@@ -1810,16 +1844,16 @@
   </div>
 
   <!-- Settings Modal -->
-  <div id="settings-modal" class="modal-backdrop">
+  <div id="settings-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 class="modal-title">Spin Studio Settings</h3>
-        <button id="btn-close-modal" class="btn-icon" title="Close">
+        <h3 id="settings-modal-title" class="modal-title">Spin Studio Settings</h3>
+        <button id="btn-close-modal" class="btn-icon" title="Close Settings" aria-label="Close Settings">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
       <div class="form-group">
-        <label class="form-label">Workout Interval Program</label>
+        <label class="form-label" for="select-program">Workout Interval Program</label>
         <select id="select-program" class="form-input">
           <option value="video_sync">🎬 Video-Matched (Auto-Sync with Active Video)</option>
           <option value="v_sweetspot">🚴 30-Min Sweet Spot Endurance (GCN)</option>
@@ -1833,52 +1867,70 @@
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">HUD Cards Screen Layout</label>
+        <label class="form-label" for="select-layout">HUD Cards Screen Layout</label>
         <select id="select-layout" class="form-input">
-          <option value="bottom">⬇️ Bottom Bar (Horizontal Row)</option>
+          <option value="bottom">⬇️ Bottom Bar (Default)</option>
+          <option value="bottom-raised">⬆️ Bottom Bar (Raised — Clears Video Timer)</option>
           <option value="left">⬅️ Left Stack (Vertical Sidebar)</option>
           <option value="right">➡️ Right Stack (Vertical Sidebar)</option>
+          <option value="compact">⚡ Compact Riding View</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">YouTube Playlist ID or URL</label>
+        <label class="form-label" for="input-playlist">YouTube Playlist ID or URL</label>
         <input type="text" id="input-playlist" class="form-input" value="__PLAYLIST_ID__">
       </div>
       <div class="form-group">
-        <label class="form-label">Rider Weight (kg)</label>
+        <label class="form-label" for="input-weight">Rider Weight (kg)</label>
         <input type="number" id="input-weight" class="form-input" value="75">
       </div>
       <div class="form-group">
-        <label class="form-label">Wheel Circumference (mm)</label>
+        <label class="form-label" for="input-wheel">Wheel Circumference (mm)</label>
         <input type="number" id="input-wheel" class="form-input" value="1436">
+        <div class="form-help-text" style="font-size:11.5px; color:var(--text-muted); margin-top:5px; line-height:1.4;">
+          Calibrates speed and distance from flywheel rotation. Standard spin bike flywheel is 1436 mm (or 2096 mm for 700x23c wheel).
+        </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Max Heart Rate (BPM)</label>
+        <label class="form-label" for="input-maxhr">Max Heart Rate (BPM)</label>
         <input type="number" id="input-maxhr" class="form-input" value="190">
       </div>
       <div class="form-group">
-        <label class="form-label">Video Sync Lead / Offset (seconds)</label>
+        <label class="form-label" for="input-video-offset">Video Sync Lead / Offset (seconds)</label>
         <input type="number" id="input-video-offset" class="form-input" value="3.5" step="0.5" min="0" max="30">
+        <div class="form-help-text" style="font-size:11.5px; color:var(--text-muted); margin-top:5px; line-height:1.4;">
+          Adds advance lead time so interval cues alert you before the on-screen instructor announces cadence or resistance changes (default 3.5s).
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Strava</label>
-        <div id="strava-status" style="font-size:13px;opacity:.85;margin-bottom:8px;">Not connected</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button type="button" id="btn-strava-connect" class="btn-primary" style="background:linear-gradient(135deg,#fc4c02,#e34402);">Connect Strava</button>
-          <button type="button" id="btn-strava-disconnect" class="btn-primary" style="display:none;">Disconnect</button>
+        <div id="strava-status" style="font-size:13px; opacity:.9; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+          <span id="strava-status-pill" class="status-pill" style="font-size:11px;">Not connected</span>
         </div>
-        <div style="font-size:12px;opacity:.65;margin-top:6px;">Same API app as Gear Tracker. Posts virtual watts. Garmin still syncs a second ride unless you turn that off for indoor.</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" id="btn-strava-connect" class="btn-primary" style="background:linear-gradient(135deg,#fc4c02,#e34402);">Connect Strava</button>
+          <button type="button" id="btn-strava-disconnect" class="btn-primary" style="display:none; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.4); color:#fca5a5;">Disconnect</button>
+        </div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:8px; line-height:1.4;">
+          Syncs your completed workout with estimated virtual watts directly to your Strava profile. (Tip: Turn off indoor bike auto-sync in Garmin Connect to prevent duplicate rides).
+        </div>
+        <details style="margin-top:10px; font-size:11.5px; color:var(--text-muted); cursor:pointer;">
+          <summary style="color:var(--accent-cyan); font-weight:600;">Advanced API Setup</summary>
+          <div style="margin-top:6px; line-height:1.4; padding:8px 10px; background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.08); border-radius:8px;">
+            To authenticate with your own Strava API app, supply your Client ID and Client Secret in <code>strava-app.json</code> with callback domain <code>localhost</code>.
+          </div>
+        </details>
       </div>
       <button id="btn-save-settings" class="btn-primary">Save & Apply</button>
     </div>
   </div>
 
   <!-- Summary Modal -->
-  <div id="summary-modal" class="modal-backdrop">
+  <div id="summary-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="summary-modal-title">
     <div class="modal-box" style="width: 520px; max-width: 95vw;">
       <div class="modal-header">
-        <h3 class="modal-title">🏆 Workout Summary</h3>
-        <button id="btn-close-summary" class="btn-icon" title="Close">
+        <h3 id="summary-modal-title" class="modal-title">🏆 Workout Summary</h3>
+        <button id="btn-close-summary" class="btn-icon" title="Close Summary" aria-label="Close Summary">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
@@ -1892,7 +1944,7 @@
         </div>
         <div class="saved-banner-text">
           <div class="saved-banner-title">🎉 Workout Completed & Saved!</div>
-          <div id="summary-saved-subtitle" class="saved-banner-sub">Recorded to local SQLite database (spin_hud.db) with 1Hz sensor telemetry.</div>
+          <div id="summary-saved-subtitle" class="saved-banner-sub">Recorded to Ride History with 1Hz sensor telemetry.</div>
         </div>
       </div>
 
@@ -1942,17 +1994,17 @@
           <button id="btn-view-history-from-sum" class="btn-primary" style="background: rgba(255, 255, 255, 0.12); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2);">📜 View History</button>
           <button id="btn-launcher-from-sum" class="btn-primary" style="background: linear-gradient(135deg, #a855f7, #6366f1); color: #fff;">🎬 Workout Launcher</button>
         </div>
-        <button id="btn-done-summary" class="btn-primary" style="background: rgba(255, 255, 255, 0.08); color: #94a3b8; font-weight: 500;">Close (Keep Riding)</button>
+        <button id="btn-done-summary" class="btn-primary" style="background: rgba(255, 255, 255, 0.08); color: #94a3b8; font-weight: 500;">Close</button>
       </div>
     </div>
   </div>
 
   <!-- Ride History Modal -->
-  <div id="history-modal" class="modal-backdrop">
+  <div id="history-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="history-modal-title">
     <div class="modal-box" style="width: 760px; max-width: 95vw; max-height: 85vh; display: flex; flex-direction: column;">
       <div class="modal-header">
-        <h3 class="modal-title">📜 Ride History & SQLite Logs</h3>
-        <button id="btn-close-history" class="btn-icon" title="Close">
+        <h3 id="history-modal-title" class="modal-title">📜 Ride History</h3>
+        <button id="btn-close-history" class="btn-icon" title="Close History" aria-label="Close History">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
@@ -1978,11 +2030,11 @@
   </div>
 
   <!-- LAN Pairing PIN Modal -->
-  <div id="pin-modal" class="modal-backdrop">
+  <div id="pin-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="pin-modal-title">
     <div class="modal-box" style="width: 380px;">
       <div class="modal-header">
-        <h3 class="modal-title">🔒 LAN Pairing Required</h3>
-        <button id="btn-close-pin" class="btn-icon" title="Close">
+        <h3 id="pin-modal-title" class="modal-title">🔒 LAN Pairing Required</h3>
+        <button id="btn-close-pin" class="btn-icon" title="Close Pairing" aria-label="Close Pairing">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
@@ -2006,6 +2058,64 @@
     let crankAngle = 0;
     const videoTitleCache = {};
     let videoSyncOffset = parseFloat(localStorage.getItem('spin_hud_video_offset') || '3.5');
+
+    // Modal Accessibility & Keyboard Focus Trapping
+    let activeModal = null;
+    let lastFocusedElement = null;
+
+    function openModal(modalEl, openerEl) {
+      if (!modalEl) return;
+      activeModal = modalEl;
+      lastFocusedElement = openerEl || document.activeElement;
+
+      modalEl.classList.add('open');
+      modalEl.setAttribute('aria-modal', 'true');
+      modalEl.setAttribute('role', 'dialog');
+
+      const hudOverlay = document.getElementById('hud-overlay');
+      const videoContainer = document.getElementById('video-container');
+      if (hudOverlay) {
+        hudOverlay.setAttribute('aria-hidden', 'true');
+        hudOverlay.setAttribute('inert', '');
+      }
+      if (videoContainer) {
+        videoContainer.setAttribute('aria-hidden', 'true');
+        videoContainer.setAttribute('inert', '');
+      }
+
+      setTimeout(() => {
+        const focusable = modalEl.querySelector('input:not([disabled]):not([type="hidden"]), select:not([disabled]), button:not([disabled]), [tabindex="0"]');
+        if (focusable) focusable.focus();
+      }, 50);
+    }
+
+    function closeModal(modalEl) {
+      const target = modalEl || activeModal;
+      if (!target) return;
+      target.classList.remove('open');
+      target.removeAttribute('aria-modal');
+
+      if (activeModal === target) activeModal = null;
+
+      const anyOpen = document.querySelector('.modal-backdrop.open');
+      if (!anyOpen) {
+        const hudOverlay = document.getElementById('hud-overlay');
+        const videoContainer = document.getElementById('video-container');
+        if (hudOverlay) {
+          hudOverlay.removeAttribute('aria-hidden');
+          hudOverlay.removeAttribute('inert');
+        }
+        if (videoContainer) {
+          videoContainer.removeAttribute('aria-hidden');
+          videoContainer.removeAttribute('inert');
+        }
+      }
+
+      if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
+        try { lastFocusedElement.focus(); } catch (e) {}
+        lastFocusedElement = null;
+      }
+    }
 
     function fetchVideoTitle(vidId, callback) {
       if (videoTitleCache[vidId]) {
@@ -2330,23 +2440,47 @@
     function updateMasterPlayButtonUI(isPlaying) {
       const playBtn = document.getElementById('btn-play');
       const workoutStatusEl = document.getElementById('workout-status');
+      const ytStatusSub = document.getElementById('yt-status-sub');
       if (!playBtn) return;
+
+      const elapsed = latestSnapshot ? (latestSnapshot.elapsed_sec || 0) : 0;
+      const isStarted = elapsed > 0;
 
       if (isPlaying) {
         playBtn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1.5"></rect><rect x="14" y="4" width="4" height="16" rx="1.5"></rect></svg>';
         playBtn.classList.add('is-playing');
-        playBtn.title = 'Pause Workout & Video (Space / Tap)';
+        playBtn.title = 'Pause Ride (Space / Tap)';
+        playBtn.setAttribute('aria-label', 'Pause ride');
         if (workoutStatusEl) {
           workoutStatusEl.textContent = 'Active Session';
           workoutStatusEl.className = 'status-pill active-session';
         }
+        if (ytStatusSub) {
+          ytStatusSub.textContent = 'Pause ride (Space or tap)';
+        }
       } else {
         playBtn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>';
         playBtn.classList.remove('is-playing');
-        playBtn.title = 'Play Workout & Video (Space / Tap)';
-        if (workoutStatusEl) {
-          workoutStatusEl.textContent = 'Workout Paused';
-          workoutStatusEl.className = 'status-pill paused-session';
+        if (isStarted) {
+          playBtn.title = 'Resume Ride (Space / Tap)';
+          playBtn.setAttribute('aria-label', 'Resume ride');
+          if (workoutStatusEl) {
+            workoutStatusEl.textContent = 'Ride Paused';
+            workoutStatusEl.className = 'status-pill paused-session';
+          }
+          if (ytStatusSub) {
+            ytStatusSub.textContent = 'Resume ride (Space or tap)';
+          }
+        } else {
+          playBtn.title = 'Begin Ride (Space / Tap)';
+          playBtn.setAttribute('aria-label', 'Begin ride');
+          if (workoutStatusEl) {
+            workoutStatusEl.textContent = 'Ready';
+            workoutStatusEl.className = 'status-pill paused-session';
+          }
+          if (ytStatusSub) {
+            ytStatusSub.textContent = 'Press Space or Tap Master Play to Begin';
+          }
         }
       }
     }
@@ -2397,22 +2531,31 @@
       if (player && player.getVideoData) {
         const data = player.getVideoData();
         if (data && data.title) {
-          document.getElementById('yt-now-playing').textContent = data.title;
+          const nowPlayingEl = document.getElementById('yt-now-playing');
+          if (nowPlayingEl) {
+            nowPlayingEl.textContent = data.title;
+            nowPlayingEl.title = data.title;
+          }
         }
       }
 
-      // Automatically sync workout program to the matching video profile!
-      if (vidId && VIDEO_ID_TO_PROGRAM[vidId]) {
-        const matchedProg = VIDEO_ID_TO_PROGRAM[vidId];
-        if (currentProgram !== matchedProg) {
-          setProgram(matchedProg, false);
-        }
-      } else if (vidId && !VIDEO_ID_TO_PROGRAM[vidId] && currentProgram.startsWith('v_')) {
-        setProgram('video_sync', false);
-      }
-
+      // Automatically sync workout program only if user is in video sync mode AND settings modal is not open!
+      const isSettingsOpen = document.getElementById('settings-modal').classList.contains('open');
       const isVideoProg = currentProgram === 'video_sync' || currentProgram === 'auto' || currentProgram.startsWith('v_');
-      const elapsed = (player && isVideoProg && typeof player.getCurrentTime === 'function')
+
+      if (!isSettingsOpen && isVideoProg) {
+        if (vidId && VIDEO_ID_TO_PROGRAM[vidId]) {
+          const matchedProg = VIDEO_ID_TO_PROGRAM[vidId];
+          if (currentProgram !== matchedProg) {
+            setProgram(matchedProg, false);
+          }
+        } else if (vidId && !VIDEO_ID_TO_PROGRAM[vidId] && currentProgram.startsWith('v_')) {
+          setProgram('video_sync', false);
+        }
+      }
+
+      const isVideoProgNow = currentProgram === 'video_sync' || currentProgram === 'auto' || currentProgram.startsWith('v_');
+      const elapsed = (player && isVideoProgNow && typeof player.getCurrentTime === 'function')
         ? Math.max(0, Math.floor(player.getCurrentTime() - videoSyncOffset))
         : (latestSnapshot ? latestSnapshot.elapsed_sec : 0);
       const cad = latestSnapshot ? latestSnapshot.cadence : null;
@@ -2659,11 +2802,21 @@
 
       // Cadence
       const cadEl = document.getElementById('val-cadence');
+      const cadStateEl = document.getElementById('cad-state');
+      const hasCad = d.sensors && d.sensors.cadence && d.sensors.cadence.connected;
       if (d.cadence !== null && d.cadence !== undefined) {
         cadEl.textContent = d.cadence;
         rotateCrank(d.cadence);
+        if (cadStateEl) {
+          cadStateEl.textContent = d.sensors.cadence.name || 'Magene Cadence';
+          cadStateEl.style.color = '#34d399';
+        }
       } else {
         cadEl.textContent = '—';
+        if (cadStateEl) {
+          cadStateEl.textContent = hasCad ? 'Idle (0 RPM)' : 'Asleep · Spin crank to wake';
+          cadStateEl.style.color = hasCad ? 'var(--text-muted)' : '#f59e0b';
+        }
       }
       document.getElementById('val-avg-cad').textContent = d.avg_cadence !== null && d.avg_cadence !== undefined ? d.avg_cadence : '—';
       document.getElementById('val-max-cad').textContent = d.max_cadence !== null && d.max_cadence !== undefined ? d.max_cadence : '—';
@@ -2671,27 +2824,52 @@
       // Speed & Virtual Power
       const spdEl = document.getElementById('val-speed');
       const distEl = document.getElementById('val-distance');
+      const hasSpd = d.sensors && d.sensors.speed && d.sensors.speed.connected;
       if (isImperial) {
         spdEl.textContent = d.speed_mph !== null ? d.speed_mph.toFixed(1) : '—';
-        distEl.textContent = d.distance_mi.toFixed(2) + ' mi';
+        distEl.textContent = (d.distance_mi || 0).toFixed(2) + ' mi';
         document.getElementById('val-avg-spd').textContent = d.avg_speed_mph !== null && d.avg_speed_mph !== undefined ? d.avg_speed_mph.toFixed(1) : '—';
       } else {
         spdEl.textContent = d.speed_kmh !== null ? d.speed_kmh.toFixed(1) : '—';
-        distEl.textContent = d.distance_km.toFixed(2) + ' km';
+        distEl.textContent = (d.distance_km || 0).toFixed(2) + ' km';
         document.getElementById('val-avg-spd').textContent = d.avg_speed_kmh !== null && d.avg_speed_kmh !== undefined ? d.avg_speed_kmh.toFixed(1) : '—';
       }
 
       // Power Meter
-      document.getElementById('val-watts').textContent = (d.watts !== null && d.watts !== undefined) ? d.watts : 0;
+      const pwrEl = document.getElementById('val-watts');
+      const hasDirectPower = d.sensors && ((d.sensors.power && d.sensors.power.connected) || (d.sensors.ftms && d.sensors.ftms.connected));
+      const pSrc = (d.power_source || 'estimated').toLowerCase();
+
+      if (pSrc === 'meter' || pSrc === 'ftms') {
+        pwrEl.textContent = (hasDirectPower && d.watts !== null && d.watts !== undefined) ? d.watts : '—';
+      } else {
+        // Estimated power requires active speed sensor
+        if (hasSpd && d.speed_mph !== null && d.speed_mph !== undefined) {
+          pwrEl.textContent = (d.watts !== null && d.watts !== undefined) ? d.watts : 0;
+        } else {
+          // Sensor disconnected or asleep: show '—' rather than misleading 0
+          pwrEl.textContent = '—';
+        }
+      }
       document.getElementById('val-avg-watts').textContent = (d.avg_watts !== null && d.avg_watts !== undefined) ? d.avg_watts : '—';
       document.getElementById('val-max-watts').textContent = (d.max_watts !== null && d.max_watts !== undefined) ? d.max_watts : '—';
       const knobEl = document.getElementById('val-knob');
-      if (knobEl) knobEl.textContent = d.knob_label || 'LOW 1';
+      if (knobEl) {
+        if (!hasSpd && !hasDirectPower) {
+          knobEl.textContent = 'Requires Speed Sensor';
+          knobEl.style.color = '#f59e0b';
+        } else {
+          knobEl.textContent = d.knob_label || 'LOW 1';
+          knobEl.style.color = '#f59e0b';
+        }
+      }
 
       // Heart Rate & Zone
       const hrEl = document.getElementById('val-hr');
       const zoneEl = document.getElementById('val-hr-zone');
       const hrCard = document.getElementById('hr-card');
+      const hrStateEl = document.getElementById('hr-state');
+      const hasHR = d.sensors && d.sensors.hr && d.sensors.hr.connected;
 
       if (d.hr !== null && d.hr !== undefined && d.hr > 0) {
         hrEl.textContent = d.hr;
@@ -2700,10 +2878,20 @@
         zoneEl.style.borderColor = d.hr_zone_color;
         zoneEl.style.backgroundColor = d.hr_zone_color + '25';
         hrCard.style.setProperty('--hr-accent', d.hr_zone_color);
+        if (hrStateEl) {
+          hrStateEl.textContent = d.sensors.hr.name || 'Garmin HR';
+          hrStateEl.style.color = '#34d399';
+        }
       } else {
         hrEl.textContent = '—';
-        zoneEl.textContent = 'Zone — : Ready';
+        zoneEl.textContent = hasHR ? 'Zone — : Acquiring…' : 'Zone — : Start Garmin Broadcast';
         zoneEl.style.color = '#ff9100';
+        zoneEl.style.borderColor = 'rgba(255, 145, 0, 0.4)';
+        zoneEl.style.backgroundColor = 'rgba(255, 109, 0, 0.18)';
+        if (hrStateEl) {
+          hrStateEl.textContent = hasHR ? 'Waiting for pulse' : 'Asleep · Broadcast HR';
+          hrStateEl.style.color = '#f59e0b';
+        }
       }
       document.getElementById('val-avg-hr').textContent = d.avg_hr !== null && d.avg_hr !== undefined ? d.avg_hr : '—';
       document.getElementById('val-max-hr').textContent = d.max_hr !== null && d.max_hr !== undefined ? d.max_hr : '—';
@@ -2761,9 +2949,15 @@
         if (d.sensors.speed) dotSpd.parentElement.title = `SPD: ${d.sensors.speed.name}`;
       }
 
-      // System Status
-      if (d.status) {
-        document.getElementById('cad-state').textContent = d.status;
+      // System Status (translate raw developer errors for riders)
+      let displayStatus = d.status || '';
+      if (displayStatus.includes('CSC Service not found') || displayStatus.includes('CSC not found')) {
+        displayStatus = 'Sensors asleep · Spin crank/wheel to wake';
+      } else if (displayStatus.includes('HR Service not found')) {
+        displayStatus = 'Heart rate asleep · Start Garmin Broadcast HR';
+      }
+      if (displayStatus && cadStateEl && (!d.sensors || !d.sensors.cadence || !d.sensors.cadence.connected)) {
+        cadStateEl.textContent = displayStatus;
       }
     }
 
@@ -2901,16 +3095,21 @@
             };
           }
         } else {
-          banner.style.display = 'none';
+          // Ride in progress / paused: clearly identify as active & not yet saved to history
+          banner.style.display = 'flex';
+          banner.style.background = 'rgba(56, 189, 248, 0.12)';
+          banner.style.borderColor = 'rgba(56, 189, 248, 0.35)';
+          if (title) title.textContent = '⏱️ Ride In Progress — Not Saved to History Yet';
+          if (sub) sub.textContent = 'Live telemetry preview. Click "Finish Workout" to end your ride and record it to Ride History. FIT/TCX downloads reflect progress so far.';
           if (btnRetry) btnRetry.style.display = 'none';
         }
       }
 
-      document.getElementById('summary-modal').classList.add('open');
+      openModal(document.getElementById('summary-modal'));
     }
 
     function closeSummary() {
-      document.getElementById('summary-modal').classList.remove('open');
+      closeModal(document.getElementById('summary-modal'));
     }
 
     const KNOB_FACTOR = {low: 1, med: 2, hard: 3.5};
@@ -2957,7 +3156,37 @@
 
     // Keyboard Shortcuts
     document.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+      // If a modal is open, trap Tab focus, handle Escape, and suppress workout hotkeys
+      if (activeModal) {
+        if (e.key === 'Escape' || e.code === 'Escape') {
+          e.preventDefault();
+          closeModal(activeModal);
+          return;
+        }
+        if (e.key === 'Tab') {
+          const focusables = Array.from(activeModal.querySelectorAll('button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]:not([disabled])'));
+          if (focusables.length > 0) {
+            const first = focusables[0];
+            const last = focusables[focusables.length - 1];
+            if (e.shiftKey) {
+              if (document.activeElement === first || !activeModal.contains(document.activeElement)) {
+                e.preventDefault();
+                last.focus();
+              }
+            } else {
+              if (document.activeElement === last || !activeModal.contains(document.activeElement)) {
+                e.preventDefault();
+                first.focus();
+              }
+            }
+          } else {
+            e.preventDefault();
+          }
+        }
+        return; // Prevent background workout shortcuts from firing while in modal
+      }
+
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
       if (e.code === 'Space') {
         e.preventDefault();
         toggleMasterPlayPause();
@@ -3013,11 +3242,15 @@
       try { localStorage.setItem('spin_hud_layout', currentLayout); } catch (e) {}
       const hud = document.getElementById('hud-overlay');
       if (hud) {
-        hud.classList.remove('layout-left', 'layout-right', 'layout-bottom');
+        hud.classList.remove('layout-left', 'layout-right', 'layout-bottom', 'layout-bottom-raised', 'layout-compact');
         if (currentLayout === 'left') {
           hud.classList.add('layout-left');
         } else if (currentLayout === 'right') {
           hud.classList.add('layout-right');
+        } else if (currentLayout === 'bottom-raised') {
+          hud.classList.add('layout-bottom', 'layout-bottom-raised');
+        } else if (currentLayout === 'compact') {
+          hud.classList.add('layout-bottom', 'layout-compact');
         } else {
           hud.classList.add('layout-bottom');
         }
@@ -3032,6 +3265,12 @@
         } else if (currentLayout === 'right') {
           if (label) label.textContent = 'Layout: Right Stack'; else btn.textContent = '➡️';
           btn.title = 'HUD Layout: Right Stack (Click or press L to switch)';
+        } else if (currentLayout === 'bottom-raised') {
+          if (label) label.textContent = 'Layout: Raised Bottom (Clears Timer)'; else btn.textContent = '⬆️';
+          btn.title = 'HUD Layout: Raised Bottom (Click or press L to switch)';
+        } else if (currentLayout === 'compact') {
+          if (label) label.textContent = 'Layout: Compact View'; else btn.textContent = '⚡';
+          btn.title = 'HUD Layout: Compact View (Click or press L to switch)';
         } else {
           if (label) label.textContent = 'Layout: Bottom Bar'; else btn.textContent = '⬇️';
           btn.title = 'HUD Layout: Bottom Bar (Click or press L to switch)';
@@ -3043,9 +3282,10 @@
     }
 
     function cycleLayout() {
-      if (currentLayout === 'bottom') setLayout('left');
-      else if (currentLayout === 'left') setLayout('right');
-      else setLayout('bottom');
+      const layouts = ['bottom', 'bottom-raised', 'left', 'right', 'compact'];
+      let idx = layouts.indexOf(currentLayout);
+      if (idx < 0) idx = 0;
+      setLayout(layouts[(idx + 1) % layouts.length]);
     }
 
     function togglePlay() {
@@ -3144,17 +3384,17 @@
       const disc = document.getElementById('btn-strava-disconnect');
       if (!el) return;
       if (!d || !d.configured) {
-        el.textContent = 'Drop client id/secret into strava-app.json (same app as Gear Tracker). Callback domain must allow localhost.';
+        el.innerHTML = '<span class="status-pill" style="font-size:11px; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.4); color:#fca5a5;">API Credentials Needed</span> <span style="font-size:12px; color:var(--text-muted); margin-left:6px;">See Advanced API Setup below</span>';
         if (conn) conn.style.display = 'none';
         if (disc) disc.style.display = 'none';
         return;
       }
       if (d.connected) {
-        el.textContent = d.athlete ? ('Connected as ' + d.athlete) : 'Connected';
+        el.innerHTML = '<span class="status-pill" style="font-size:11px; background:rgba(16,185,129,0.2); border:1px solid rgba(16,185,129,0.4); color:#34d399;">Connected</span>' + (d.athlete ? (' <span style="color:#fff; font-weight:600; margin-left:6px;">' + d.athlete + '</span>') : '');
         if (conn) conn.style.display = 'none';
         if (disc) disc.style.display = '';
       } else {
-        el.textContent = 'Not connected';
+        el.innerHTML = '<span class="status-pill" style="font-size:11px; background:rgba(148,163,184,0.2); border:1px solid rgba(148,163,184,0.4); color:#94a3b8;">Not Connected</span>';
         if (conn) conn.style.display = '';
         if (disc) disc.style.display = 'none';
       }
@@ -3236,10 +3476,10 @@
 
     const btnViewHist = document.getElementById('btn-view-history-from-sum');
     if (btnViewHist) {
-      btnViewHist.onclick = () => {
+      btnViewHist.onclick = (e) => {
         closeSummary();
         loadHistory();
-        historyModal.classList.add('open');
+        openModal(historyModal, e.currentTarget);
       };
     }
 
@@ -3266,15 +3506,15 @@
 
     // Settings Modal
     const modal = document.getElementById('settings-modal');
-    document.getElementById('btn-settings').onclick = () => {
+    document.getElementById('btn-settings').onclick = (e) => {
       const modalSelect = document.getElementById('select-program');
       if (modalSelect) modalSelect.value = currentProgram;
       const offsetInput = document.getElementById('input-video-offset');
       if (offsetInput) offsetInput.value = videoSyncOffset;
       refreshStravaStatus();
-      modal.classList.add('open');
+      openModal(modal, e.currentTarget);
     };
-    document.getElementById('btn-close-modal').onclick = () => modal.classList.remove('open');
+    document.getElementById('btn-close-modal').onclick = () => closeModal(modal);
     
     document.getElementById('btn-save-settings').onclick = () => {
       const pl = document.getElementById('input-playlist').value.trim();
@@ -3293,7 +3533,7 @@
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({playlist_id: pl, wheel_circ_mm: wheel, max_hr: maxhr, rider_weight_kg: weight})
       }).then(() => {
-        modal.classList.remove('open');
+        closeModal(modal);
         if (pl && pl !== playlistId) {
           playlistId = pl;
           if (player && player.loadPlaylist) {
@@ -3312,11 +3552,11 @@
 
     // History Modal
     const historyModal = document.getElementById('history-modal');
-    document.getElementById('btn-history').onclick = () => {
+    document.getElementById('btn-history').onclick = (e) => {
       loadHistory();
-      historyModal.classList.add('open');
+      openModal(historyModal, e.currentTarget);
     };
-    document.getElementById('btn-close-history').onclick = () => historyModal.classList.remove('open');
+    document.getElementById('btn-close-history').onclick = () => closeModal(historyModal);
 
     function loadHistory() {
       const loading = document.getElementById('history-loading');
@@ -3330,7 +3570,22 @@
         .then(rides => {
           loading.style.display = 'none';
           if (!rides || rides.length === 0) {
-            loading.textContent = 'No past rides recorded yet. Complete a workout to auto-save to SQLite!';
+            const hasActiveRide = latestSnapshot && (latestSnapshot.elapsed_sec > 0 || latestSnapshot.is_running);
+            if (hasActiveRide) {
+              const stateStr = latestSnapshot.is_running ? 'running' : 'paused';
+              const mins = Math.floor((latestSnapshot.elapsed_sec || 0) / 60);
+              const secs = (latestSnapshot.elapsed_sec || 0) % 60;
+              const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+              const distStr = isImperial
+                ? `${((latestSnapshot.distance_mi || 0)).toFixed(2)} mi`
+                : `${((latestSnapshot.distance_km || 0)).toFixed(2)} km`;
+              loading.innerHTML = `<div style="padding:24px 16px; line-height:1.6; text-align:center;">
+                <div style="font-size:15px; font-weight:700; color:#38bdf8; margin-bottom:8px;">⏱️ Your current ride is ${stateStr} (${timeStr} · ${distStr})</div>
+                <div style="color:var(--text-muted); font-size:13px; max-width:500px; margin:0 auto;">No past rides recorded yet. Click <b>Finish Workout</b> to end your session and save it permanently to Ride History.</div>
+              </div>`;
+            } else {
+              loading.textContent = 'No past rides recorded yet. Complete a workout to save it to Ride History!';
+            }
             loading.style.display = 'block';
             return;
           }
@@ -3405,10 +3660,10 @@
       return res;
     };
 
-    function openPinModal() {
+    function openPinModal(openerEl) {
       const pinModal = document.getElementById('pin-modal');
       if (pinModal) {
-        pinModal.classList.add('open');
+        openModal(pinModal, openerEl);
         const input = document.getElementById('input-lan-pin');
         if (input) {
           input.value = '';
@@ -3453,8 +3708,8 @@
     // LAN Pairing PIN Modal
     const pinModal = document.getElementById('pin-modal');
     const btnPin = document.getElementById('btn-pin');
-    if (btnPin) btnPin.onclick = openPinModal;
-    document.getElementById('btn-close-pin').onclick = () => pinModal.classList.remove('open');
+    if (btnPin) btnPin.onclick = (e) => openPinModal(e.currentTarget);
+    document.getElementById('btn-close-pin').onclick = () => closeModal(pinModal);
     document.getElementById('btn-submit-pin').onclick = () => {
       const pin = document.getElementById('input-lan-pin').value.trim();
       origFetch('/api/auth/pin', {
@@ -3465,7 +3720,7 @@
       .then(r => r.json())
       .then(data => {
         if (data && data.ok) {
-          pinModal.classList.remove('open');
+          closeModal(pinModal);
           document.getElementById('pin-error-msg').textContent = '';
         } else {
           document.getElementById('pin-error-msg').textContent = 'Invalid PIN. Check terminal.';
@@ -3475,6 +3730,13 @@
         document.getElementById('pin-error-msg').textContent = 'Authentication failed.';
       });
     };
+
+    // Close modals on backdrop click
+    document.querySelectorAll('.modal-backdrop').forEach(m => {
+      m.addEventListener('click', (e) => {
+        if (e.target === m) closeModal(m);
+      });
+    });
 
     // Live Clocks
     function updateClock() {
