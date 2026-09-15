@@ -581,6 +581,16 @@
       gap: 6px;
     }
 
+    .layout-left .card-main.hr-card-main,
+    .layout-right .card-main.hr-card-main {
+      margin: 1px 0;
+    }
+
+    .layout-left .hr-zone-word,
+    .layout-right .hr-zone-word {
+      font-size: 10.5px;
+    }
+
     .layout-left .card-unit,
     .layout-right .card-unit {
       font-size: 13px;
@@ -730,6 +740,35 @@
       line-height: 1;
       letter-spacing: -1px;
       color: #fff;
+      transition: color 0.25s ease;
+    }
+
+    .card-main.hr-card-main {
+      margin: 4px 0 2px 0;
+    }
+
+    .hr-val-container {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+
+    .hr-num-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .hr-zone-word {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      line-height: 1;
+      margin-top: -1px;
+      transition: color 0.25s ease;
     }
 
     .card-unit {
@@ -1718,13 +1757,18 @@
           <span>Heart Rate</span>
           <span class="heart-icon">❤️</span>
         </div>
-        <div class="card-main">
-          <span id="val-hr" class="card-value">—</span>
-          <span class="card-unit">BPM</span>
+        <div class="card-main hr-card-main">
+          <div class="hr-val-container">
+            <div class="hr-num-row">
+              <span id="val-hr" class="card-value">—</span>
+              <span class="card-unit">BPM</span>
+            </div>
+            <span id="val-hr-zone" class="hr-zone-word">Ready</span>
+          </div>
         </div>
         <div class="card-footer">
-          <span id="val-hr-zone" class="zone-pill">Zone — : Ready</span>
           <span>Avg <b id="val-avg-hr">—</b> · Max <b id="val-max-hr">—</b></span>
+          <span id="val-hr-state">Searching…</span>
         </div>
       </div>
 
@@ -2691,18 +2735,30 @@
       const hrEl = document.getElementById('val-hr');
       const zoneEl = document.getElementById('val-hr-zone');
       const hrCard = document.getElementById('hr-card');
+      const hrStateEl = document.getElementById('val-hr-state');
 
       if (d.hr !== null && d.hr !== undefined && d.hr > 0) {
         hrEl.textContent = d.hr;
-        zoneEl.textContent = `Zone ${d.hr_zone}: ${d.hr_zone_name}`;
-        zoneEl.style.color = d.hr_zone_color;
-        zoneEl.style.borderColor = d.hr_zone_color;
-        zoneEl.style.backgroundColor = d.hr_zone_color + '25';
-        hrCard.style.setProperty('--hr-accent', d.hr_zone_color);
+        const hrColor = d.hr_zone_color || (d.hr_zone === 1 ? '#38bdf8' : d.hr_zone === 2 ? '#22c55e' : d.hr_zone === 3 ? '#eab308' : d.hr_zone === 4 ? '#f97316' : d.hr_zone === 5 ? '#ef4444' : '#fff');
+        hrEl.style.color = hrColor;
+        zoneEl.textContent = d.hr_zone ? `Zone ${d.hr_zone}` : 'Ready';
+        zoneEl.style.color = hrColor;
+        zoneEl.title = d.hr_zone_name ? `Zone ${d.hr_zone}: ${d.hr_zone_name}` : '';
+        hrCard.style.setProperty('--hr-accent', hrColor);
+        if (hrStateEl) {
+          hrStateEl.textContent = d.hr_zone_name || 'Active';
+          hrStateEl.style.color = hrColor;
+        }
       } else {
         hrEl.textContent = '—';
-        zoneEl.textContent = 'Zone — : Ready';
-        zoneEl.style.color = '#ff9100';
+        hrEl.style.color = '#fff';
+        zoneEl.textContent = 'Ready';
+        zoneEl.style.color = 'var(--text-muted)';
+        zoneEl.title = '';
+        if (hrStateEl) {
+          hrStateEl.textContent = (d.sensors && d.sensors.hr && d.sensors.hr.connected) ? 'Connected' : 'Searching…';
+          hrStateEl.style.color = 'var(--text-muted)';
+        }
       }
       document.getElementById('val-avg-hr').textContent = d.avg_hr !== null && d.avg_hr !== undefined ? d.avg_hr : '—';
       document.getElementById('val-max-hr').textContent = d.max_hr !== null && d.max_hr !== undefined ? d.max_hr : '—';
