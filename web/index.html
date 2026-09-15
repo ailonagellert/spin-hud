@@ -581,6 +581,16 @@
       gap: 6px;
     }
 
+    .layout-left .card-main.hr-card-main,
+    .layout-right .card-main.hr-card-main {
+      margin: 1px 0;
+    }
+
+    .layout-left .hr-zone-word,
+    .layout-right .hr-zone-word {
+      font-size: 10.5px;
+    }
+
     .layout-left .card-unit,
     .layout-right .card-unit {
       font-size: 13px;
@@ -730,6 +740,35 @@
       line-height: 1;
       letter-spacing: -1px;
       color: #fff;
+      transition: color 0.25s ease;
+    }
+
+    .card-main.hr-card-main {
+      margin: 4px 0 2px 0;
+    }
+
+    .hr-val-container {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+
+    .hr-num-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .hr-zone-word {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      line-height: 1;
+      margin-top: -1px;
+      transition: color 0.25s ease;
     }
 
     .card-unit {
@@ -1749,16 +1788,19 @@
           <span>Heart Rate</span>
           <span class="heart-icon">❤️</span>
         </div>
-        <div class="card-main">
-          <span id="val-hr" class="card-value">—</span>
-          <span class="card-unit">BPM</span>
-        </div>
-        <div class="card-zone-row">
-          <span id="val-hr-zone" class="zone-pill">Zone — : Ready</span>
+        <div class="card-main hr-card-main">
+          <div class="hr-val-container">
+            <div class="hr-num-row">
+              <span id="val-hr" class="card-value">—</span>
+              <span class="card-unit">BPM</span>
+            </div>
+            <span id="val-hr-zone" class="hr-zone-word">Ready</span>
+          </div>
         </div>
         <div class="card-footer">
           <span>Avg <b id="val-avg-hr">—</b> · Max <b id="val-max-hr">—</b></span>
           <span id="hr-state" class="sensor-sub-state" style="font-size:11px; color:var(--text-muted);">Searching…</span>
+        </div>
         </div>
       </div>
 
@@ -2873,21 +2915,22 @@
 
       if (d.hr !== null && d.hr !== undefined && d.hr > 0) {
         hrEl.textContent = d.hr;
-        zoneEl.textContent = `Zone ${d.hr_zone}: ${d.hr_zone_name}`;
-        zoneEl.style.color = d.hr_zone_color;
-        zoneEl.style.borderColor = d.hr_zone_color;
-        zoneEl.style.backgroundColor = d.hr_zone_color + '25';
-        hrCard.style.setProperty('--hr-accent', d.hr_zone_color);
+        const hrColor = d.hr_zone_color || (d.hr_zone === 1 ? '#38bdf8' : d.hr_zone === 2 ? '#22c55e' : d.hr_zone === 3 ? '#eab308' : d.hr_zone === 4 ? '#f97316' : d.hr_zone === 5 ? '#ef4444' : '#fff');
+        hrEl.style.color = hrColor;
+        zoneEl.textContent = d.hr_zone ? `Zone ${d.hr_zone}` : 'Ready';
+        zoneEl.style.color = hrColor;
+        zoneEl.title = d.hr_zone_name ? `Zone ${d.hr_zone}: ${d.hr_zone_name}` : '';
+        hrCard.style.setProperty('--hr-accent', hrColor);
         if (hrStateEl) {
-          hrStateEl.textContent = d.sensors.hr.name || 'Garmin HR';
+          hrStateEl.textContent = (d.sensors && d.sensors.hr && d.sensors.hr.name) ? d.sensors.hr.name : (d.hr_zone_name || 'Garmin HR');
           hrStateEl.style.color = '#34d399';
         }
       } else {
         hrEl.textContent = '—';
-        zoneEl.textContent = hasHR ? 'Zone — : Acquiring…' : 'Zone — : Start Garmin Broadcast';
-        zoneEl.style.color = '#ff9100';
-        zoneEl.style.borderColor = 'rgba(255, 145, 0, 0.4)';
-        zoneEl.style.backgroundColor = 'rgba(255, 109, 0, 0.18)';
+        hrEl.style.color = '#fff';
+        zoneEl.textContent = hasHR ? 'Acquiring…' : 'Ready';
+        zoneEl.style.color = 'var(--text-muted)';
+        zoneEl.title = '';
         if (hrStateEl) {
           hrStateEl.textContent = hasHR ? 'Waiting for pulse' : 'Asleep · Broadcast HR';
           hrStateEl.style.color = '#f59e0b';
