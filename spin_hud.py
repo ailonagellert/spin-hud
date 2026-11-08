@@ -2407,6 +2407,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
         </div>
         <div style="font-size:12px;opacity:.65;margin-top:6px;">Same API app as Gear Tracker. Posts virtual watts. Garmin still syncs a second ride unless you turn that off for indoor.</div>
       </div>
+      <div id="settings-error" style="display:none; color:#f87171; font-size:12px; margin-bottom:10px; line-height:1.4; padding:8px 10px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); border-radius:6px;"></div>
       <button id="btn-save-settings" class="btn-primary">Save & Apply</button>
     </div>
   </div>
@@ -3602,17 +3603,60 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
     // Settings Modal
     const modal = document.getElementById('settings-modal');
+
+    function loadSettingsIntoModal() {
+      const errEl = document.getElementById('settings-error');
+      if (errEl) {
+        errEl.textContent = '';
+        errEl.style.display = 'none';
+      }
+      fetch('/api/settings')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!data) return;
+          if (data.playlist_id !== undefined && data.playlist_id !== '') {
+            const plInput = document.getElementById('input-playlist');
+            if (plInput) plInput.value = data.playlist_id;
+          }
+          if (data.rider_weight_kg !== undefined && data.rider_weight_kg > 0) {
+            const wInput = document.getElementById('input-weight');
+            if (wInput) wInput.value = data.rider_weight_kg;
+          }
+          if (data.wheel_circ_mm !== undefined && data.wheel_circ_mm > 0) {
+            const whInput = document.getElementById('input-wheel');
+            if (whInput) whInput.value = Math.round(data.wheel_circ_mm);
+          } else if (data.wheel_circ_m !== undefined && data.wheel_circ_m > 0) {
+            const whInput = document.getElementById('input-wheel');
+            if (whInput) whInput.value = Math.round(data.wheel_circ_m * 1000);
+          }
+          if (data.max_hr !== undefined && data.max_hr > 0) {
+            const hrInput = document.getElementById('input-maxhr');
+            if (hrInput) hrInput.value = data.max_hr;
+          }
+        })
+        .catch(err => console.warn('Could not load settings:', err));
+    }
+
+    // Populate settings inputs on startup
+    loadSettingsIntoModal();
+
     document.getElementById('btn-settings').onclick = () => {
       const modalSelect = document.getElementById('select-program');
       if (modalSelect) modalSelect.value = currentProgram;
       const offsetInput = document.getElementById('input-video-offset');
       if (offsetInput) offsetInput.value = videoSyncOffset;
+      loadSettingsIntoModal();
       refreshStravaStatus();
       modal.classList.add('open');
     };
     document.getElementById('btn-close-modal').onclick = () => modal.classList.remove('open');
     
     document.getElementById('btn-save-settings').onclick = () => {
+      const errEl = document.getElementById('settings-error');
+      if (errEl) {
+        errEl.textContent = '';
+        errEl.style.display = 'none';
+      }
       const pl = document.getElementById('input-playlist').value.trim();
       const wheel = parseFloat(document.getElementById('input-wheel').value);
       const maxhr = parseInt(document.getElementById('input-maxhr').value);
@@ -3623,18 +3667,44 @@ INDEX_HTML = r"""<!DOCTYPE html>
         try { localStorage.setItem('spin_hud_video_offset', videoSyncOffset); } catch (e) {}
       }
       setProgram(document.getElementById('select-program').value, true);
+
+      const saveBtn = document.getElementById('btn-save-settings');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
       
       fetch('/api/settings', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({playlist_id: pl, wheel_circ_mm: wheel, max_hr: maxhr, rider_weight_kg: weight})
-      }).then(() => {
+      }).then(async (r) => {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save & Apply';
+        if (!r.ok) {
+          let msg = 'Failed to save settings (' + r.status + ')';
+          try {
+            const res = await r.json();
+            if (res.errors && res.errors.length) msg = res.errors.join(', ');
+            else if (res.error) msg = res.error;
+          } catch (e) {}
+          if (errEl) {
+            errEl.textContent = msg;
+            errEl.style.display = 'block';
+          }
+          return;
+        }
         modal.classList.remove('open');
         if (pl && pl !== playlistId) {
           playlistId = pl;
           if (player && player.loadPlaylist) {
             player.loadPlaylist({list: pl, listType: 'playlist'});
           }
+        }
+      }).catch(err => {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save & Apply';
+        if (errEl) {
+          errEl.textContent = 'Network error saving settings: ' + err.message;
+          errEl.style.display = 'block';
         }
       });
     };
@@ -3985,6 +4055,19 @@ async def handle_http_request(reader: asyncio.StreamReader, writer: asyncio.Stre
                 direction = str(data.get("dir") or "").strip().lower()
                 state.nudge_knob(direction in ("tighten", "up", "+"))
             out = json.dumps({"ok": True, **state.knob_snapshot()}).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n" + out)
+            await writer.drain()
+            writer.close()
+
+        elif path == "/api/settings" and method == "GET":
+            out = json.dumps({
+                "ok": True,
+                "playlist_id": state.playlist_id,
+                "wheel_circ_mm": round(state.wheel_circ_m * 1000.0, 1),
+                "wheel_circ_m": state.wheel_circ_m,
+                "max_hr": state.max_hr,
+                "rider_weight_kg": state.rider_weight_kg,
+            }).encode()
             writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n" + out)
             await writer.drain()
             writer.close()

@@ -1631,7 +1631,7 @@
                 <span class="menu-item-tag">PICKER</span>
               </button>
 
-              <button id="btn-history" class="menu-item-btn" title="Ride History & SQLite Logs (H)">
+              <button id="btn-history" class="menu-item-btn" title="Ride History (H)">
                 <span class="menu-item-icon">
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#00e5ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 8v4l3 3"></path>
@@ -1963,6 +1963,7 @@
           </div>
         </details>
       </div>
+      <div id="settings-error" style="display:none; color:#f87171; font-size:12px; margin-bottom:10px; line-height:1.4; padding:8px 10px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); border-radius:6px;"></div>
       <button id="btn-save-settings" class="btn-primary">Save & Apply</button>
     </div>
   </div>
@@ -3099,7 +3100,7 @@
           banner.style.background = 'rgba(16, 185, 129, 0.12)';
           banner.style.borderColor = 'rgba(16, 185, 129, 0.3)';
           if (title) title.textContent = '🎉 Workout Completed & Saved!';
-          if (sub) sub.textContent = saveInfo.ride_id ? `Saved to Ride History (SQLite ID #${saveInfo.ride_id}) with 1Hz telemetry.` : `Saved to local SQLite database (spin_hud.db).`;
+          if (sub) sub.textContent = saveInfo.ride_id ? `Saved to Ride History (#${saveInfo.ride_id}) with 1Hz telemetry.` : `Saved to Ride History.`;
           if (btnRetry) btnRetry.style.display = 'none';
         } else if (saveInfo && saveInfo.error) {
           banner.style.display = 'flex';
@@ -3549,17 +3550,60 @@
 
     // Settings Modal
     const modal = document.getElementById('settings-modal');
+
+    function loadSettingsIntoModal() {
+      const errEl = document.getElementById('settings-error');
+      if (errEl) {
+        errEl.textContent = '';
+        errEl.style.display = 'none';
+      }
+      fetch('/api/settings')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!data) return;
+          if (data.playlist_id !== undefined && data.playlist_id !== '') {
+            const plInput = document.getElementById('input-playlist');
+            if (plInput) plInput.value = data.playlist_id;
+          }
+          if (data.rider_weight_kg !== undefined && data.rider_weight_kg > 0) {
+            const wInput = document.getElementById('input-weight');
+            if (wInput) wInput.value = data.rider_weight_kg;
+          }
+          if (data.wheel_circ_mm !== undefined && data.wheel_circ_mm > 0) {
+            const whInput = document.getElementById('input-wheel');
+            if (whInput) whInput.value = Math.round(data.wheel_circ_mm);
+          } else if (data.wheel_circ_m !== undefined && data.wheel_circ_m > 0) {
+            const whInput = document.getElementById('input-wheel');
+            if (whInput) whInput.value = Math.round(data.wheel_circ_m * 1000);
+          }
+          if (data.max_hr !== undefined && data.max_hr > 0) {
+            const hrInput = document.getElementById('input-maxhr');
+            if (hrInput) hrInput.value = data.max_hr;
+          }
+        })
+        .catch(err => console.warn('Could not load settings:', err));
+    }
+
+    // Populate settings inputs on startup
+    loadSettingsIntoModal();
+
     document.getElementById('btn-settings').onclick = (e) => {
       const modalSelect = document.getElementById('select-program');
       if (modalSelect) modalSelect.value = currentProgram;
       const offsetInput = document.getElementById('input-video-offset');
       if (offsetInput) offsetInput.value = videoSyncOffset;
+      loadSettingsIntoModal();
       refreshStravaStatus();
       openModal(modal, e.currentTarget);
     };
     document.getElementById('btn-close-modal').onclick = () => closeModal(modal);
     
     document.getElementById('btn-save-settings').onclick = () => {
+      const errEl = document.getElementById('settings-error');
+      if (errEl) {
+        errEl.textContent = '';
+        errEl.style.display = 'none';
+      }
       const pl = document.getElementById('input-playlist').value.trim();
       const wheel = parseFloat(document.getElementById('input-wheel').value);
       const maxhr = parseInt(document.getElementById('input-maxhr').value);
@@ -3570,18 +3614,44 @@
         try { localStorage.setItem('spin_hud_video_offset', videoSyncOffset); } catch (e) {}
       }
       setProgram(document.getElementById('select-program').value, true);
+
+      const saveBtn = document.getElementById('btn-save-settings');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
       
       fetch('/api/settings', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({playlist_id: pl, wheel_circ_mm: wheel, max_hr: maxhr, rider_weight_kg: weight})
-      }).then(() => {
+      }).then(async (r) => {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save & Apply';
+        if (!r.ok) {
+          let msg = 'Failed to save settings (' + r.status + ')';
+          try {
+            const res = await r.json();
+            if (res.errors && res.errors.length) msg = res.errors.join(', ');
+            else if (res.error) msg = res.error;
+          } catch (e) {}
+          if (errEl) {
+            errEl.textContent = msg;
+            errEl.style.display = 'block';
+          }
+          return;
+        }
         closeModal(modal);
         if (pl && pl !== playlistId) {
           playlistId = pl;
           if (player && player.loadPlaylist) {
             player.loadPlaylist({list: pl, listType: 'playlist'});
           }
+        }
+      }).catch(err => {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save & Apply';
+        if (errEl) {
+          errEl.textContent = 'Network error saving settings: ' + err.message;
+          errEl.style.display = 'block';
         }
       });
     };

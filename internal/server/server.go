@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -541,6 +542,20 @@ func (s *Server) handleKnob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		cur := s.State.GetSettings()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"ok":              true,
+			"playlist_id":     cur.PlaylistID,
+			"wheel_circ_mm":   math.Round(cur.WheelCircM * 1000),
+			"wheel_circ_m":    cur.WheelCircM,
+			"max_hr":          cur.MaxHR,
+			"rider_weight_kg": cur.RiderWeightKg,
+			"workout_name":    cur.WorkoutName,
+		})
+		return
+	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -590,17 +605,13 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if v, ok := data["workout_name"]; ok {
-		s.State.SetWorkoutName(fmt.Sprint(v))
-	}
-
 	if len(errs) > 0 {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]any{"ok": false, "errors": errs})
 		return
 	}
-	s.State.ApplySettings(newPl, newCirc, newMaxHR, newWeight)
+
 	if s.DB != nil {
 		settingsMap := map[string]string{
 			"playlist_id":     newPl,
@@ -622,6 +633,11 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	if v, ok := data["workout_name"]; ok {
+		s.State.SetWorkoutName(fmt.Sprint(v))
+	}
+	s.State.ApplySettings(newPl, newCirc, newMaxHR, newWeight)
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprint(w, `{"ok":true}`)
 }

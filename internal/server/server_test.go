@@ -461,6 +461,27 @@ func TestSettingsPersistence(t *testing.T) {
 	if dbSettings["playlist_id"] != "PLTEST123" || dbSettings["max_hr"] != "185" || dbSettings["workout_name"] != "FTP Test" {
 		t.Fatalf("unexpected persisted settings: %+v", dbSettings)
 	}
+
+	// Verify GET /api/settings round-trip
+	getReq := httptest.NewRequest(http.MethodGet, "/api/settings", nil)
+	getRec := httptest.NewRecorder()
+	handler.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET /api/settings failed: %d", getRec.Code)
+	}
+	var getResp map[string]any
+	if err := json.NewDecoder(getRec.Body).Decode(&getResp); err != nil {
+		t.Fatalf("failed to decode GET /api/settings response: %v", err)
+	}
+	if getResp["ok"] != true {
+		t.Fatalf("expected ok: true, got %+v", getResp)
+	}
+	if getResp["playlist_id"] != "PLTEST123" || getResp["max_hr"] != float64(185) || getResp["workout_name"] != "FTP Test" {
+		t.Fatalf("unexpected settings from GET /api/settings: %+v", getResp)
+	}
+	if getResp["wheel_circ_mm"] != float64(2105) {
+		t.Fatalf("expected wheel_circ_mm=2105, got %v", getResp["wheel_circ_mm"])
+	}
 }
 
 func TestServerWorkoutFinishSaveFailureAndRetry(t *testing.T) {
@@ -723,6 +744,9 @@ func TestSettingsWriteFailureReportsError(t *testing.T) {
 	errs, _ := res["errors"].([]any)
 	if len(errs) == 0 {
 		t.Fatalf("expected non-empty errors array, got: %v", res)
+	}
+	if st.GetSettings().PlaylistID == "PLTESTFAIL" {
+		t.Fatalf("settings in state must not be modified when DB persistence fails")
 	}
 }
 
